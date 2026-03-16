@@ -1,0 +1,1656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Kanban Board Game</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #0d4a6b;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  min-width: 1480px;
+  user-select: none;
+}
+
+/* ===== HEADER ===== */
+#game-header {
+  background: #c8e8f8;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  height: 58px;
+  gap: 8px;
+  border-bottom: 3px solid #5aacce;
+}
+.logo { font-size: 24px; font-weight: bold; color: #1a6a9f; white-space: nowrap; }
+.logo .sub { color: #888; font-weight: normal; }
+.version { font-size: 9px; color: #aaa; margin-left: 2px; }
+.info-box {
+  background: white;
+  border: 1px solid #aaccee;
+  padding: 4px 14px;
+  min-width: 90px;
+  text-align: center;
+  border-radius: 3px;
+}
+.info-value { font-size: 18px; font-weight: bold; color: #333; }
+#standup-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+#worker-pool {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.standup-lbl { font-size: 9px; color: #666; margin-bottom: 2px; }
+.btn { border: none; cursor: pointer; border-radius: 4px; font-size: 12px; padding: 7px 14px; font-weight: bold; }
+.btn-green  { background: #5cb85c; color: white; border: 1px solid #4cae4c; font-size: 14px; padding: 8px 18px; }
+.btn-green:hover { background: #449d44; }
+.btn-green:disabled { background: #aaa; border-color: #999; cursor: not-allowed; }
+.btn-blue   { background: #5bc0de; color: white; border: 1px solid #46b8da; }
+.btn-chart  { background: #e8e8e8; border: 1px solid #ccc; padding: 6px 8px; font-size: 16px; }
+.btn-red    { background: #d9534f; color: white; border: 1px solid #d43f3a; }
+
+/* ===== BOARD ===== */
+#board-container {
+  background: white;
+  margin: 8px auto;
+  width: fit-content;
+  border: 2px solid #ccc;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+/* Stage header */
+#stage-header {
+  display: flex;
+  background: #f5f5f5;
+  border-bottom: 1px solid #ddd;
+}
+.sh { text-align: center; border-right: 1px solid #ddd; font-weight: bold; font-size: 12px; padding: 4px 2px; }
+.sh-backlog    { width: 155px; }
+.sh-ready      { width: 190px; }
+.sh-analysis   { width: 380px; color: #d9534f; }
+.sh-development{ width: 380px; color: #428bca; }
+.sh-test       { width: 190px; color: #5cb85c; }
+.sh-deployed   { width: 190px; }
+.sh-sub { display: flex; border-top: 1px solid #eee; }
+.sh-sub-cell { flex: 1; font-size: 10px; color: #aaa; text-align: center; padding: 1px; border-right: 1px solid #eee; }
+.sh-sub-cell:last-child { border-right: none; }
+
+/* Board rows */
+#expedite-row {
+  display: flex;
+  border-bottom: 2px solid #ccc;
+  min-height: 100px;
+  background: #f2f2f2;
+}
+.expedite-label {
+  width: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #e4e4e4;
+  border-right: 1px solid #ccc;
+}
+.expedite-label span {
+  writing-mode: vertical-lr;
+  transform: rotate(180deg);
+  font-size: 10px;
+  font-weight: bold;
+  color: #777;
+  letter-spacing: 1px;
+}
+.expedite-lanes { flex: 1; display: flex; }
+
+#standard-row { display: flex; min-height: 520px; }
+
+/* Lane columns */
+.lane {
+  border-right: 1px solid #ccc;
+  padding: 4px 7px;
+  position: relative;
+  overflow: visible;
+}
+.lane-backlog      { width: 155px; background: #f8f8f8; }
+.lane-ready        { width: 190px; }
+.lane-analysis     { width: 205px; }
+.lane-analysis-done{ width: 175px; background: #fbfbfb; }
+.lane-development  { width: 205px; }
+.lane-dev-done     { width: 175px; background: #fbfbfb; }
+.lane-test         { width: 190px; }
+.lane-deployed     { width: 190px; }
+.lane.drop-target  { background: #e0f0ff !important; outline: 2px dashed #428bca; }
+
+/* Backlog deck sections */
+.bl-section { margin-bottom: 6px; }
+.bl-title { font-size: 9px; color: #888; text-align: center; margin-bottom: 2px; font-style: italic; }
+.bl-stack { position: relative; width: 100%; min-height: 92px; margin: 0 auto; cursor: pointer; }
+.bl-shadow {
+  position: absolute;
+  width: 100%; height: 88px;
+  background: rgba(0,0,0,0.05);
+  border: 1px solid rgba(0,0,0,0.1);
+  border-radius: 3px;
+}
+.bl-stack-count {
+  position: absolute;
+  bottom: 0; right: 4px;
+  font-size: 9px; color: #aaa;
+}
+.bl-stack:hover .bl-top { filter: brightness(0.95); }
+
+/* ===== CARDS ===== */
+.card {
+  width: 100%;
+  border-radius: 3px;
+  padding: 10px;
+  margin: 3px 0;
+  position: relative;
+  font-size: 10px;
+  cursor: default;
+  box-shadow: 1px 1px 3px rgba(0,0,0,0.15);
+}
+.card.card-s { background: #fffbcc; border: 1.5px dashed #c8bb00; }
+.card.card-f { background: #eedcff; border: 1.5px dashed #9060cc; }
+.card.card-i { background: #dcffdc; border: 1.5px dashed #60aa60; }
+.card.card-e { background: #d8edff; border: 1.5px dashed #4080cc; }
+.card.selected-target { box-shadow: 0 0 0 3px #428bca; }
+.card.clickable:hover { filter: brightness(0.97); cursor: pointer; }
+
+.card-hdr { display: flex; justify-content: space-between; font-weight: bold; font-size: 11px; margin-bottom: 1px; }
+.card-id   { color: #333; }
+.card-val  { color: #555; }
+.card-desc { font-size: 9px; color: #999; text-align: center; margin-bottom: 3px; }
+.card-desc.due-desc { color: #9060aa; font-weight: bold; }
+.card-desc.overdue  { color: #d9534f; font-weight: bold; }
+
+/* Progress bars */
+.bars { margin: 3px 0; }
+.pbar { display: flex; gap: 2px; height: 11px; margin: 2px 0; }
+.blk  { width: 11px; height: 11px; border-radius: 1px; flex-shrink: 0; }
+.blk-a     { background: #d9534f; }
+.blk-d     { background: #428bca; }
+.blk-t     { background: #5cb85c; }
+.blk-empty { background: #e0e0e0; border: 1px solid #ccc; }
+
+@keyframes fillBlockA {
+  0%   { background: #e0e0e0; box-shadow: inset 0 0 0 1px #ccc; }
+  100% { background: #d9534f; box-shadow: none; }
+}
+@keyframes fillBlockD {
+  0%   { background: #e0e0e0; box-shadow: inset 0 0 0 1px #ccc; }
+  100% { background: #428bca; box-shadow: none; }
+}
+@keyframes fillBlockT {
+  0%   { background: #e0e0e0; box-shadow: inset 0 0 0 1px #ccc; }
+  100% { background: #5cb85c; box-shadow: none; }
+}
+.blk-new-a { animation: fillBlockA 0.56s ease-in-out both; }
+.blk-new-d { animation: fillBlockD 0.56s ease-in-out both; }
+.blk-new-t { animation: fillBlockT 0.56s ease-in-out both; }
+
+
+.card-footer { font-size: 9px; color: #bbb; text-align: center; margin-top: 2px; }
+
+/* Workers sitting on cards */
+.card-workers { display: flex; gap: 2px; flex-wrap: wrap; margin-top: 3px; justify-content: flex-end; }
+
+/* Pull button */
+.pull-btn {
+  display: block;
+  width: 100%;
+  margin-top: 3px;
+  padding: 2px 0;
+  font-size: 9px;
+  background: #e8f4ff;
+  border: 1px solid #aaccee;
+  border-radius: 2px;
+  cursor: pointer;
+  text-align: center;
+  color: #428bca;
+}
+.pull-btn:hover { background: #cce0ff; }
+
+/* ===== WORKERS ===== */
+.worker {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px;
+  cursor: pointer;
+  border: 2px solid rgba(255,255,255,0.5);
+  flex-shrink: 0;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+.worker:hover { transform: scale(1.1); }
+.worker.analyst   { background: #d9534f; color: white; }
+.worker.developer { background: #428bca; color: white; }
+.worker.tester    { background: #5cb85c; color: white; }
+.worker.w-selected { box-shadow: 0 0 0 3px #fff700; transform: scale(1.15); }
+.worker.w-small   { width: 20px; height: 20px; font-size: 10px; border-width: 1px; margin: 0; }
+.worker.w-small:hover { transform: scale(1.1); }
+
+/* ===== MODALS ===== */
+.overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+}
+.modal {
+  background: white;
+  border-radius: 5px;
+  padding: 20px;
+  max-width: 700px; width: 92%;
+  max-height: 88vh; overflow-y: auto;
+}
+.modal-hdr {
+  background: #5cb85c; color: white;
+  margin: -20px -20px 14px;
+  padding: 12px 20px;
+  border-radius: 5px 5px 0 0;
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 15px; font-weight: bold;
+}
+.modal-hdr.blue { background: #428bca; }
+.modal-x { cursor: pointer; font-size: 20px; }
+.modal h3 { margin: 12px 0 5px; color: #333; }
+.modal p  { line-height: 1.6; margin: 4px 0; }
+.modal ul { margin: 5px 0 5px 20px; }
+.modal li { margin: 3px 0; line-height: 1.5; }
+.modal-foot { text-align: right; margin-top: 14px; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: bold; margin: 2px; }
+.badge-s { background: #fffbcc; border: 1px solid #c8bb00; }
+.badge-f { background: #eedcff; border: 1px solid #9060cc; }
+.badge-i { background: #dcffdc; border: 1px solid #60aa60; }
+.badge-e { background: #d8edff; border: 1px solid #4080cc; }
+
+/* Work log */
+#work-log {
+  position: fixed; bottom: 10px; right: 10px;
+  background: rgba(0,0,0,0.85); color: white;
+  padding: 10px 12px; border-radius: 5px;
+  font-size: 11px; max-width: 320px; max-height: 160px;
+  overflow-y: auto; z-index: 50; display: none;
+  line-height: 1.5;
+}
+.log-a   { color: #ff8888; }
+.log-d   { color: #88aaff; }
+.log-t   { color: #88ff88; }
+.log-dep { color: #ffd700; font-weight: bold; }
+.log-adv { color: #aaffaa; }
+
+/* Toast */
+#toast {
+  position: fixed; top: 66px; left: 50%; transform: translateX(-50%);
+  background: #333; color: white;
+  padding: 8px 22px; border-radius: 20px; font-size: 13px;
+  z-index: 200; display: none; pointer-events: none; white-space: nowrap;
+}
+
+/* Day notification */
+#day-notify {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: none; align-items: center; justify-content: center; z-index: 80;
+  pointer-events: none;
+}
+.day-banner {
+  background: white; border-radius: 8px;
+  padding: 20px 40px; text-align: center;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+.day-banner .db-day { font-size: 32px; font-weight: bold; color: #428bca; }
+.day-banner .db-rev  { font-size: 14px; color: #5cb85c; margin-top: 4px; }
+
+/* Game over */
+#game-over {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.85);
+  display: none; align-items: center; justify-content: center; z-index: 150;
+}
+.go-box {
+  background: white; border-radius: 8px;
+  padding: 30px 40px; text-align: center; max-width: 500px; width: 90%;
+}
+.go-box h2 { font-size: 26px; color: #333; }
+.go-score { font-size: 52px; font-weight: bold; color: #5cb85c; margin: 15px 0; }
+.go-table { width: 100%; border-collapse: collapse; margin: 12px 0; text-align: left; font-size: 13px; }
+.go-table td { padding: 4px 8px; border-bottom: 1px solid #eee; }
+.go-table td:last-child { text-align: right; font-weight: bold; }
+
+/* Charts */
+#charts-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.7);
+  display: none; align-items: center; justify-content: center; z-index: 120;
+}
+.charts-box {
+  background: white; border-radius: 5px;
+  padding: 15px; width: 700px;
+}
+.chart-tabs { display: flex; gap: 5px; margin-bottom: 10px; }
+.chart-tab {
+  padding: 6px 14px; cursor: pointer;
+  border: 1px solid #ccc; border-radius: 3px;
+  background: #f5f5f5; font-size: 12px;
+}
+.chart-tab.active { background: #428bca; color: white; border-color: #428bca; }
+
+/* Wip over */
+.wip-over { color: #d9534f !important; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div id="game-header">
+  <div>
+    <div class="logo">Kanban<span class="sub">game</span><span class="version">v1.0</span></div>
+  </div>
+  <div class="info-box">
+    <div style="font-size:10px;color:#888">День</div>
+    <div class="info-value" id="hdr-day">1</div>
+  </div>
+  <div class="info-box">
+    <div style="font-size:10px;color:#888">Выручка</div>
+    <div class="info-value" id="hdr-rev">$0</div>
+  </div>
+  <div id="standup-area" ondragover="event.preventDefault()" ondrop="workerDropToPool(event)">
+    <div class="standup-lbl">Стендап</div>
+    <div id="worker-pool"></div>
+  </div>
+  <button class="btn btn-green" id="btn-start" onclick="startWork()">Начать работу</button>
+  <button class="btn btn-chart" onclick="showCharts('cfd')" title="Кумулятивная диаграмма потока">📈</button>
+  <button class="btn btn-chart" onclick="showCharts('ct')"  title="Время цикла">⏱️</button>
+  <button class="btn btn-chart" onclick="showCharts('fin')" title="Финансовый график">💰</button>
+  <button class="btn btn-blue"  onclick="showHelp()">Помощь</button>
+  <button class="btn btn-red"   onclick="confirmExit()">Выход</button>
+</div>
+
+<!-- BOARD -->
+<div id="board-container">
+  <!-- Stage headers -->
+  <div id="stage-header">
+    <div style="width:22px;flex-shrink:0;border-right:1px solid #ddd;"></div>
+    <div class="sh sh-backlog">Бэклог</div>
+    <div class="sh sh-ready" id="sh-ready">Готово к работе (5)</div>
+    <div class="sh sh-analysis" id="sh-analysis">
+      Анализ (3)
+      <div class="sh-sub">
+        <div class="sh-sub-cell">В работе</div>
+        <div class="sh-sub-cell">Готово</div>
+      </div>
+    </div>
+    <div class="sh sh-development" id="sh-development">
+      Разработка (5)
+      <div class="sh-sub">
+        <div class="sh-sub-cell">В работе</div>
+        <div class="sh-sub-cell">Готово</div>
+      </div>
+    </div>
+    <div class="sh sh-test" id="sh-test">Тестирование (3)</div>
+    <div class="sh sh-deployed">Выпущено</div>
+  </div>
+
+  <!-- Expedite row -->
+  <div id="expedite-row">
+    <div class="expedite-label"><span>СРОЧНЫЕ (1)</span></div>
+    <div class="expedite-lanes">
+      <div class="lane lane-backlog"  id="exp-backlog"  style="background:#f2f2f2"></div>
+      <div class="lane lane-ready"    id="exp-ready"    style="background:#f2f2f2" ondragover="event.preventDefault()" ondrop="dropCard(event,'expReady')"></div>
+      <div class="lane lane-analysis" id="exp-analysis" style="background:#f2f2f2" ondragover="event.preventDefault()" ondrop="dropCard(event,'expAnalysis')"></div>
+      <div class="lane lane-analysis-done" id="exp-analysis-done" style="background:#f2f2f2" ondragover="event.preventDefault()" ondrop="dropCard(event,'expAnalysisDone')"></div>
+      <div class="lane lane-development"   id="exp-development"   style="background:#f2f2f2" ondragover="event.preventDefault()" ondrop="dropCard(event,'expDevelopment')"></div>
+      <div class="lane lane-dev-done"      id="exp-dev-done"      style="background:#f2f2f2" ondragover="event.preventDefault()" ondrop="dropCard(event,'expDevDone')"></div>
+      <div class="lane lane-test"     id="exp-test"     style="background:#f2f2f2" ondragover="event.preventDefault()" ondrop="dropCard(event,'expTest')"></div>
+      <div class="lane lane-deployed" id="exp-deployed" style="background:#f2f2f2"></div>
+    </div>
+  </div>
+
+  <!-- Standard row -->
+  <div id="standard-row">
+    <div style="width:22px;flex-shrink:0;background:#e4e4e4;border-right:1px solid #ccc;"></div>
+    <div class="lane lane-backlog" id="lane-backlog"></div>
+    <div class="lane lane-ready"   id="lane-ready"    ondragover="event.preventDefault()" ondrop="dropCard(event,'ready')"></div>
+    <div class="lane lane-analysis" id="lane-analysis" ondragover="event.preventDefault()" ondrop="dropCard(event,'analysis')"></div>
+    <div class="lane lane-analysis-done" id="lane-analysis-done" ondragover="event.preventDefault()" ondrop="dropCard(event,'analysisDone')"></div>
+    <div class="lane lane-development"   id="lane-development"   ondragover="event.preventDefault()" ondrop="dropCard(event,'development')"></div>
+    <div class="lane lane-dev-done"      id="lane-dev-done"      ondragover="event.preventDefault()" ondrop="dropCard(event,'devDone')"></div>
+    <div class="lane lane-test"     id="lane-test"     ondragover="event.preventDefault()" ondrop="dropCard(event,'test')"></div>
+    <div class="lane lane-deployed" id="lane-deployed"></div>
+  </div>
+</div>
+
+<!-- Work log -->
+<div id="work-log"></div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- Day notification -->
+<div id="day-notify">
+  <div class="day-banner">
+    <div class="db-day" id="db-day"></div>
+    <div class="db-rev"  id="db-rev"></div>
+  </div>
+</div>
+
+<!-- Game Over -->
+<div id="game-over">
+  <div class="go-box">
+    <h2>🎉 Игра окончена!</h2>
+    <div class="go-score" id="go-score"></div>
+    <table class="go-table" id="go-table"></table>
+    <button class="btn btn-green" onclick="newGame()" style="margin-top:10px">Играть снова</button>
+  </div>
+</div>
+
+<!-- Charts overlay -->
+<div id="charts-overlay" onclick="if(event.target===this)hideCharts()">
+  <div class="charts-box">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <strong>Графики</strong>
+      <span style="cursor:pointer;font-size:20px" onclick="hideCharts()">×</span>
+    </div>
+    <div class="chart-tabs">
+      <div class="chart-tab" id="tab-cfd" onclick="showCharts('cfd')">Кумулятивный поток</div>
+      <div class="chart-tab" id="tab-ct"  onclick="showCharts('ct')">Время цикла</div>
+      <div class="chart-tab" id="tab-fin" onclick="showCharts('fin')">Финансы</div>
+    </div>
+    <canvas id="chart-canvas" width="670" height="350" style="border:1px solid #eee;border-radius:3px"></canvas>
+  </div>
+</div>
+
+<!-- Help Modal -->
+<div id="help-overlay" class="overlay" style="display:none" onclick="if(event.target===this)hideHelp()">
+  <div class="modal">
+    <div class="modal-hdr">
+      Добро пожаловать
+      <span class="modal-x" onclick="hideHelp()">×</span>
+    </div>
+    <h3>Предыстория</h3>
+    <p>Ваша компания продаёт подписку на программный продукт. Игра начинается с 1-го дня. По мере выполнения историй вы добавляете новые возможности продукта и привлекаете подписчиков. Каждый день вы получаете доход от каждого подписчика.</p>
+    <h3>Цель</h3>
+    <p>Максимизировать прибыль. Вы зарабатываете выручку каждый день за каждую выпущенную Стандартную историю.</p>
+    <h3>Начало игры</h3>
+    <p>Нажмите на сотрудника в зоне «Стендап», чтобы выбрать его, затем нажмите на карточку истории для назначения. После назначения всех нажмите <strong>Начать работу</strong>. Каждый день случайное число от 1 до 6 определяет объём выполненной работы. Специалисты в своей колонке получают двойной результат. Игра заканчивается после <strong>Дня 35</strong>.</p>
+    <h3>Перемещение карточек</h3>
+    <p>Кликайте по стопкам в Бэклоге, чтобы перетащить карточки в «Готово к работе». Карточки автоматически переходят на следующий этап, когда прогресс-бар заполнен. Используйте кнопки <strong>→ Взять</strong> для перемещения карточек из подколонок «Готово» в следующую колонку «В работе» (с учётом WIP-лимитов).</p>
+    <h3>Типы историй</h3>
+    <ul>
+      <li><span class="badge badge-s">S</span> <strong>Стандартная</strong> — жёлтая, привлекает подписчиков и генерирует ежедневную выручку</li>
+      <li><span class="badge badge-f">F</span> <strong>Фиксированная дата</strong> — фиолетовая, бонус при доставке до срока; штраф при опоздании</li>
+      <li><span class="badge badge-i">I</span> <strong>Нематериальная</strong> — зелёная, не приносит прямой выручки, но усиливает команду после выпуска</li>
+      <li><span class="badge badge-e">E</span> <strong>Срочная</strong> — синяя, использует срочную линию для наивысшего приоритета</li>
+    </ul>
+    <h3>WIP-лимиты</h3>
+    <ul>
+      <li><strong>Готово к работе:</strong> максимум 5 историй</li>
+      <li><strong>Анализ</strong> (в работе + готово): максимум 3 истории</li>
+      <li><strong>Разработка</strong> (в работе + готово): максимум 5 историй</li>
+      <li><strong>Тестирование:</strong> максимум 3 истории</li>
+    </ul>
+    <div class="modal-foot">
+      <button class="btn btn-green" onclick="hideHelp()">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================================================
+//  STORY DATABASE
+// ===================================================
+const STORIES = [
+  // Standard
+  {id:'S1',  type:'s', val:110, w:[8,8,6]},
+  {id:'S2',  type:'s', val:120, w:[10,9,6]},
+  {id:'S3',  type:'s', val:110, w:[9,9,7]},
+  {id:'S4',  type:'s', val:100, w:[8,8,6]},
+  {id:'S5',  type:'s', val:130, w:[10,9,7]},
+  {id:'S6',  type:'s', val:110, w:[9,7,3]},
+  {id:'S7',  type:'s', val:120, w:[10,8,9]},
+  {id:'S8',  type:'s', val:100, w:[8,8,9]},
+  {id:'S9',  type:'s', val:120, w:[9,9,12]},
+  {id:'S10', type:'s', val:110, w:[10,9,7]},
+  {id:'S11', type:'s', val:130, w:[12,7,9]},
+  {id:'S12', type:'s', val:100, w:[7,8,10]},
+  {id:'S13', type:'s', val:100, w:[8,9,9]},
+  {id:'S14', type:'s', val:100, w:[5,6,4]},
+  {id:'S15', type:'s', val:70,  w:[5,5,4]},
+  {id:'S16', type:'s', val:60,  w:[4,4,3]},
+  {id:'S17', type:'s', val:70,  w:[5,5,4]},
+  {id:'S18', type:'s', val:70,  w:[5,6,4]},
+  {id:'S19', type:'s', val:100, w:[6,6,5]},
+  {id:'S20', type:'s', val:80,  w:[5,5,4]},
+  {id:'S21', type:'s', val:70,  w:[4,5,3]},
+  {id:'S22', type:'s', val:90,  w:[6,6,5]},
+  {id:'S23', type:'s', val:110, w:[7,6,5]},
+  {id:'S24', type:'s', val:90,  w:[6,6,5]},
+  {id:'S25', type:'s', val:80,  w:[5,5,4]},
+  {id:'S26', type:'s', val:110, w:[7,7,5]},
+  {id:'S27', type:'s', val:100, w:[6,7,5]},
+  {id:'S28', type:'s', val:90,  w:[6,6,5]},
+  {id:'S29', type:'s', val:110, w:[7,7,6]},
+  {id:'S30', type:'s', val:70,  w:[4,5,3]},
+  {id:'S31', type:'s', val:80,  w:[5,6,4]},
+  {id:'S32', type:'s', val:80,  w:[5,5,4]},
+  {id:'S33', type:'s', val:60,  w:[4,4,3]},
+  {id:'S34', type:'s', val:130, w:[8,8,6]},
+  {id:'S35', type:'s', val:90,  w:[5,6,5]},
+  {id:'S36', type:'s', val:110, w:[7,6,5]},
+  {id:'S37', type:'s', val:80,  w:[5,5,4]},
+  {id:'S38', type:'s', val:80,  w:[5,6,4]},
+  {id:'S39', type:'s', val:100, w:[6,6,5]},
+  {id:'S40', type:'s', val:90,  w:[5,6,4]},
+  {id:'S41', type:'s', val:110, w:[7,7,5]},
+  {id:'S42', type:'s', val:90,  w:[6,6,5]},
+  {id:'S43', type:'s', val:70,  w:[4,5,3]},
+  {id:'S44', type:'s', val:110, w:[7,7,5]},
+  {id:'S45', type:'s', val:90,  w:[6,6,4]},
+  {id:'S46', type:'s', val:90,  w:[6,6,5]},
+  {id:'S47', type:'s', val:110, w:[7,7,5]},
+  {id:'S48', type:'s', val:90,  w:[5,6,5]},
+  {id:'S49', type:'s', val:70,  w:[4,5,4]},
+  {id:'S50', type:'s', val:110, w:[7,7,5]},
+  // Fixed date
+  {id:'F1', type:'f', val:150,  dueDay:15, w:[2,3,2]},
+  {id:'F2', type:'f', val:-500, dueDay:20, w:[4,5,3]},
+  {id:'F3', type:'f', val:100,  dueDay:25, w:[8,9,8]},
+  {id:'F4', type:'f', val:200,  dueDay:30, w:[6,7,5]},
+  {id:'F5', type:'f', val:-300, dueDay:28, w:[5,6,4]},
+  // Intangible
+  {id:'I1', type:'i', name:'Обновление базы данных',     w:[6,9,7], buff:'developer'},
+  {id:'I2', type:'i', name:'Документация легаси-кода',   w:[2,6,4], buff:'analyst'},
+  {id:'I3', type:'i', name:'Рефакторинг ядра системы',   w:[4,7,5], buff:'developer'},
+  {id:'I4', type:'i', name:'Настройка CI/CD пайплайна',  w:[3,5,3], buff:'tester'},
+  {id:'I5', type:'i', name:'Улучшение покрытия тестами', w:[2,4,5], buff:'tester'},
+  // Expedite (appear at specific days)
+  {id:'E1', type:'e', val:2000,  dueDay:18, appearDay:8,  w:[3,4,2]},
+  {id:'E2', type:'e', val:-2500, dueDay:25, appearDay:12, w:[4,5,3]},
+  {id:'E3', type:'e', val:-1000, dueDay:30, appearDay:18, w:[3,4,3]},
+  {id:'E4', type:'e', val:3000,  dueDay:35, appearDay:22, w:[5,6,4]},
+];
+
+// ===================================================
+//  GAME STATE
+// ===================================================
+let G = {};
+let selectedWorker = null;
+let currentChart = 'cfd';
+
+const WIP = { ready:5, analysis:3, development:5, test:3, expedite:1 };
+
+// Column IDs for standard and expedite lanes
+const STD_LANES  = ['backlog','ready','analysis','analysisDone','development','devDone','test','deployed'];
+const EXP_LANES  = ['expBacklog','expReady','expAnalysis','expAnalysisDone','expDevelopment','expDevDone','expTest','expDeployed'];
+
+function mkStory(def) {
+  return {
+    ...def,
+    w: [...def.w],
+    wr: [...def.w],  // remaining work
+    age: 0,
+    enteredDay: null,
+    deployedDay: null,
+    assignedWorkers: [],
+    lane: def.type === 'e' ? 'hidden' : 'backlog',
+    expedite: def.type === 'e',
+  };
+}
+
+function newGame() {
+  hideGameOver();
+  const stories = STORIES.map(mkStory);
+
+  G = {
+    day: 1,
+    revenue: 0,
+    dailyRev: 0,
+    buffs: { analyst:0, developer:0, tester:0 },
+    workDone: false,
+
+    // All stories keyed by id
+    stories: Object.fromEntries(stories.map(s => [s.id, s])),
+
+    // Lane arrays — expedite stories start hidden in a 'hidden' lane; appear at appearDay
+    backlog:        stories.filter(s => s.type !== 'e').map(s => s.id),
+    ready:          [],
+    analysis:       [],
+    analysisDone:   [],
+    development:    [],
+    devDone:        [],
+    test:           [],
+    deployed:       [],
+    expBacklog:     [],
+    expReady:       [],
+    expAnalysis:    [],
+    expAnalysisDone:[],
+    expDevelopment: [],
+    expDevDone:     [],
+    expTest:        [],
+    expDeployed:    [],
+
+    workers: [
+      {id:'a1', type:'analyst',   assigned:null},
+      {id:'a2', type:'analyst',   assigned:null},
+      {id:'a3', type:'analyst',   assigned:null},
+      {id:'d1', type:'developer', assigned:null},
+      {id:'d2', type:'developer', assigned:null},
+      {id:'d3', type:'developer', assigned:null},
+      {id:'t1', type:'tester',    assigned:null},
+      {id:'t2', type:'tester',    assigned:null},
+      {id:'t3', type:'tester',    assigned:null},
+    ],
+
+    // Chart data
+    cfdHistory:  [],   // [{day, backlog, ready, analysis, dev, test, deployed}]
+    ctHistory:   [],   // [{id, days}]
+    revHistory:  [],   // [{day, cumRev, dailyRev}]
+
+    log: [],
+  };
+
+  // Pre-populate initial board
+  const initialBoard = {
+    test:         ['S1', 'S2', 'S3'],
+    devDone:      ['S4', 'S5'],
+    development:  ['S6', 'S7'],
+    analysisDone: ['S8'],
+    analysis:     ['S9', 'S10'],
+    ready:        ['S11', 'S12', 'S13', 'F1', 'I1'],
+  };
+  Object.entries(initialBoard).forEach(([lane, ids]) => {
+    ids.forEach(id => {
+      const story = G.stories[id];
+      if (!story) return;
+      G.backlog = G.backlog.filter(sid => sid !== id);
+      G[lane].push(id);
+      story.lane = lane;
+      story.enteredDay = 1;
+      story.age = 0;
+      // Zero out work for completed stages
+      if (lane === 'test' || lane === 'devDone') {
+        story.wr[0] = 0; story.wr[1] = 0;
+      } else if (lane === 'development') {
+        story.wr[0] = 0;
+        story.wr[1] = Math.ceil(story.w[1] * 0.6);
+      } else if (lane === 'analysisDone') {
+        story.wr[0] = 0;
+      } else if (lane === 'analysis') {
+        story.wr[0] = Math.ceil(story.w[0] * 0.6);
+      }
+    });
+  });
+
+  selectedWorker = null;
+  render();
+  showHelp();
+}
+
+// ===================================================
+//  LANE HELPERS
+// ===================================================
+function getLane(laneKey) { return G[laneKey] || []; }
+function wipCount(laneKey) {
+  if (laneKey === 'analysis')   return G.analysis.length + G.analysisDone.length;
+  if (laneKey === 'development') return G.development.length + G.devDone.length;
+  if (laneKey === 'expAnalysis') return G.expAnalysis.length + G.expAnalysisDone.length;
+  if (laneKey === 'expDevelopment') return G.expDevelopment.length + G.expDevDone.length;
+  return G[laneKey] ? G[laneKey].length : 0;
+}
+function activeBar(story) {
+  const loc = story.lane;
+  if (loc === 'analysis' || loc === 'expAnalysis') return 0;
+  if (loc === 'development' || loc === 'expDevelopment') return 1;
+  if (loc === 'test' || loc === 'expTest') return 2;
+  return -1;
+}
+function isSpecialist(workerType, lane) {
+  if (workerType === 'analyst'   && (lane === 'analysis'    || lane === 'expAnalysis'))    return true;
+  if (workerType === 'developer' && (lane === 'development' || lane === 'expDevelopment')) return true;
+  if (workerType === 'tester'    && (lane === 'test'        || lane === 'expTest'))        return true;
+  return false;
+}
+function removeSid(laneKey, sid) {
+  G[laneKey] = G[laneKey].filter(id => id !== sid);
+}
+function addSid(laneKey, sid) {
+  if (!G[laneKey].includes(sid)) G[laneKey].push(sid);
+}
+function moveTo(sid, toLane) {
+  const story = G.stories[sid];
+  const from = story.lane;
+  // Remove from old lane
+  removeSid(from, sid);
+  addSid(toLane, sid);
+  story.lane = toLane;
+  if (from === 'backlog' || from === 'expBacklog') {
+    story.enteredDay = G.day;
+    story.age = 0;
+  }
+}
+
+// ===================================================
+//  PULL MECHANICS
+// ===================================================
+function canPullTo(toLane) {
+  if (toLane === 'ready')       return wipCount('ready')       < WIP.ready;
+  if (toLane === 'analysis')    return wipCount('analysis')    < WIP.analysis;
+  if (toLane === 'development') return wipCount('development') < WIP.development;
+  if (toLane === 'test')        return wipCount('test')        < WIP.test;
+  if (toLane === 'expAnalysis')    return wipCount('expAnalysis')    < WIP.analysis;
+  if (toLane === 'expDevelopment') return wipCount('expDevelopment') < WIP.development;
+  if (toLane === 'expTest')        return wipCount('expTest')        < WIP.test;
+  return true;
+}
+
+function pullCard(sid) {
+  const story = G.stories[sid];
+  const loc = story.lane;
+  let to = null;
+  if (loc === 'analysisDone')    to = canPullTo('development') ? 'development' : null;
+  if (loc === 'devDone')         to = canPullTo('test')        ? 'test'        : null;
+  if (loc === 'expAnalysisDone') to = canPullTo('expDevelopment') ? 'expDevelopment' : null;
+  if (loc === 'expDevDone')      to = canPullTo('expTest')        ? 'expTest'        : null;
+  if (loc === 'ready')           to = canPullTo('analysis')    ? 'analysis'    : null;
+  if (loc === 'expReady')        to = canPullTo('expAnalysis') ? 'expAnalysis' : null;
+  if (to) {
+    moveTo(sid, to);
+    render();
+  } else {
+    toast('WIP-лимит достигнут — нельзя взять!');
+  }
+}
+
+function pullFromBacklog(type) {
+  // type: 's','f','i'
+  if (!canPullTo('ready')) { toast('Достигнут WIP-лимит «Готово к работе» (макс. 5)'); return; }
+  const sid = G.backlog.find(id => G.stories[id].type === type);
+  if (!sid) { toast('В бэклоге больше нет историй типа ' + type.toUpperCase()); return; }
+  moveTo(sid, 'ready');
+  render();
+}
+
+function pullExpediteFromBacklog() {
+  if (G.expBacklog.length === 0) { toast('Срочных историй пока нет'); return; }
+  if (G.expReady.length >= WIP.expedite) { toast('Срочная линия заполнена'); return; }
+  const sid = G.expBacklog[0];
+  moveTo(sid, 'expReady');
+  render();
+}
+
+// ===================================================
+//  WORKER ASSIGNMENT
+// ===================================================
+function selectWorker(wid) {
+  selectedWorker = (selectedWorker === wid) ? null : wid;
+  render();
+}
+
+function assignWorkerToStory(wid, sid) {
+  const story = G.stories[sid];
+  const worker = G.workers.find(w => w.id === wid);
+  if (!worker || !story) return;
+  const bar = activeBar(story);
+  if (bar < 0) { toast('У этой истории нет активного этапа работы'); return; }
+  if (worker.assigned === sid) {
+    // Toggle off — unassign
+    worker.assigned = null;
+    story.assignedWorkers = story.assignedWorkers.filter(id => id !== wid);
+  } else {
+    // Unassign from previous story
+    if (worker.assigned) {
+      const prev = G.stories[worker.assigned];
+      if (prev) prev.assignedWorkers = prev.assignedWorkers.filter(id => id !== wid);
+    }
+    worker.assigned = sid;
+    if (!story.assignedWorkers.includes(wid)) story.assignedWorkers.push(wid);
+  }
+  selectedWorker = null;
+  render();
+}
+
+function assignToStory(sid) {
+  if (!selectedWorker) return;
+  assignWorkerToStory(selectedWorker, sid);
+}
+
+function workerDropToPool(event) {
+  const data = event.dataTransfer.getData('text/plain');
+  if (!data.startsWith('worker:')) return;
+  event.preventDefault();
+  dragEnd(event);
+  unassignWorker(data.slice(7));
+}
+
+function unassignWorker(wid) {
+  const worker = G.workers.find(w => w.id === wid);
+  if (!worker || !worker.assigned) return;
+  const story = G.stories[worker.assigned];
+  if (story) story.assignedWorkers = story.assignedWorkers.filter(id => id !== wid);
+  worker.assigned = null;
+  render();
+}
+
+// ===================================================
+//  GAME MECHANICS — START WORK
+// ===================================================
+function startWork() {
+  if (G.workDone) return;
+  G.workDone = true;
+  document.getElementById('btn-start').disabled = true;
+
+  const log = [];
+  const workerNames = { analyst:'Аналитик', developer:'Разработчик', tester:'Тестировщик' };
+  const workerEmoji = { analyst:'🔴', developer:'🔵', tester:'🟢' };
+
+  // Snapshot work remaining before applying work
+  const wrBefore = {};
+  G.workers.forEach(w => {
+    if (w.assigned && G.stories[w.assigned]) {
+      wrBefore[w.assigned] = [...G.stories[w.assigned].wr];
+    }
+  });
+
+  // Process each assigned worker — collect pending advances instead of calling immediately
+  const pendingAdvances = [];
+  G.workers.forEach(worker => {
+    if (!worker.assigned) return;
+    const story = G.stories[worker.assigned];
+    if (!story) return;
+    const bar = activeBar(story);
+    if (bar < 0) return;
+
+    const spec = isSpecialist(worker.type, story.lane);
+    let work, rollDesc;
+    if (spec) {
+      const r1 = Math.floor(Math.random() * 6) + 1;
+      const r2 = Math.floor(Math.random() * 6) + 1;
+      work = r1 + r2;
+      rollDesc = `2d6: ${r1}+${r2}=${work}`;
+    } else {
+      const r1 = Math.floor(Math.random() * 6) + 1;
+      work = r1;
+      rollDesc = `1d6: ${r1}`;
+    }
+
+    story.wr[bar] = Math.max(0, story.wr[bar] - work);
+
+    const cls = worker.type === 'analyst' ? 'log-a' : worker.type === 'developer' ? 'log-d' : 'log-t';
+    log.push(`<span class="${cls}">${workerEmoji[worker.type]} ${worker.id.toUpperCase()}</span> → ${story.id}: ${rollDesc} = <strong>${work}</strong> работы`);
+
+    if (story.wr[bar] === 0) {
+      pendingAdvances.push(story.id);
+    }
+  });
+
+  // Age all in-pipeline stories
+  [...G.ready, ...G.analysis, ...G.analysisDone, ...G.development, ...G.devDone, ...G.test,
+   ...G.expReady, ...G.expAnalysis, ...G.expAnalysisDone, ...G.expDevelopment, ...G.expDevDone, ...G.expTest].forEach(sid => {
+    G.stories[sid].age = (G.stories[sid].age || 0) + 1;
+  });
+
+  // Daily revenue from deployed standard stories
+  G.dailyRev = G.deployed.concat(G.expDeployed)
+    .filter(sid => G.stories[sid].type === 's')
+    .reduce((sum, sid) => sum + G.stories[sid].val, 0);
+  G.revenue += G.dailyRev;
+
+  // Compute newly filled blocks for animation
+  window._newlyFilledBlocks = {};
+  Object.entries(wrBefore).forEach(([sid, prevWr]) => {
+    const story = G.stories[sid];
+    if (!story) return;
+    [0, 1, 2].forEach(barIdx => {
+      const prevDone = story.w[barIdx] - prevWr[barIdx];
+      const currDone = story.w[barIdx] - story.wr[barIdx];
+      if (currDone > prevDone) {
+        if (!window._newlyFilledBlocks[sid]) window._newlyFilledBlocks[sid] = {};
+        window._newlyFilledBlocks[sid][barIdx] = prevDone;
+      }
+    });
+  });
+
+  // Compute how long fill animation takes (last block delay + animation duration + buffer)
+  let maxDelay = 0;
+  Object.entries(window._newlyFilledBlocks).forEach(([sid, bars]) => {
+    const story = G.stories[sid];
+    Object.entries(bars).forEach(([barIdx, newStart]) => {
+      const done = story.w[barIdx] - story.wr[barIdx];
+      const lastDelay = (done - 1 - newStart) * 620;
+      if (lastDelay > maxDelay) maxDelay = lastDelay;
+    });
+  });
+  const fillDuration = maxDelay + 560 + 200; // last block delay + anim duration + buffer
+
+  // Record chart data (workers still assigned — unassign after animation)
+  recordChartData();
+
+  // Show log
+  showWorkLog(log);
+
+  // Render: shows fill animation
+  render();
+
+  // After fill animation: fly workers back, then fly completed cards
+  setTimeout(() => {
+    window._newlyFilledBlocks = {};
+
+    // Capture worker badge positions (source for flyback)
+    const workerSources = {};
+    G.workers.filter(w => w.assigned).forEach(w => {
+      const badge = document.querySelector('[data-wid="' + w.id + '"]');
+      if (badge) workerSources[w.id] = { rect: badge.getBoundingClientRect(), type: w.type };
+    });
+
+    // Capture card FROM positions before advancing
+    const fromRects = {};
+    pendingAdvances.forEach(sid => {
+      const el = document.querySelector('[data-sid="' + sid + '"]');
+      if (el) fromRects[sid] = el.getBoundingClientRect();
+    });
+
+    // Unassign all workers now
+    Object.values(G.stories).forEach(s => { s.assignedWorkers = []; });
+    G.workers.forEach(w => { w.assigned = null; });
+
+    // Advance stories in game state and re-render (badges gone, pool restored)
+    pendingAdvances.forEach(sid => advanceStory(sid, []));
+    render();
+
+    // Capture pool TARGET positions after re-render
+    const workerTargets = {};
+    G.workers.forEach(w => {
+      const el = document.querySelector('#worker-pool [data-wid="' + w.id + '"]');
+      if (el) workerTargets[w.id] = el.getBoundingClientRect();
+    });
+
+    // Fly worker clones from card positions back to pool
+    Object.entries(workerSources).forEach(([wid, { rect: fromRect, type }]) => {
+      const toRect = workerTargets[wid];
+      if (!toRect) return;
+      const clone = document.createElement('div');
+      clone.className = 'worker ' + type + ' w-small';
+      clone.innerHTML = workerIcon(type);
+      clone.style.cssText =
+        'position:fixed;left:' + fromRect.left + 'px;top:' + fromRect.top + 'px;' +
+        'width:' + fromRect.width + 'px;height:' + fromRect.height + 'px;' +
+        'z-index:9998;pointer-events:none;' +
+        'transition:left 0.52s cubic-bezier(.4,0,.2,1),top 0.52s cubic-bezier(.4,0,.2,1);';
+      document.body.appendChild(clone);
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        clone.style.left = toRect.left + 'px';
+        clone.style.top  = toRect.top  + 'px';
+      }));
+      setTimeout(() => clone.remove(), 580);
+    });
+
+    // Fly each card from its old position to the new one
+    pendingAdvances.forEach(sid => {
+      const fromRect = fromRects[sid];
+      if (!fromRect) return;
+      const toEl = document.querySelector('[data-sid="' + sid + '"]');
+      if (!toEl) return;
+      const toRect = toEl.getBoundingClientRect();
+
+      // Clone card at FROM position
+      const clone = toEl.cloneNode(true);
+      clone.removeAttribute('draggable');
+      clone.style.cssText =
+        'position:fixed;left:' + fromRect.left + 'px;top:' + fromRect.top + 'px;' +
+        'width:' + fromRect.width + 'px;z-index:9999;pointer-events:none;' +
+        'box-shadow:4px 8px 24px rgba(0,0,0,0.38);' +
+        'transition:left 0.52s cubic-bezier(.4,0,.2,1),top 0.52s cubic-bezier(.4,0,.2,1);';
+      document.body.appendChild(clone);
+      toEl.style.visibility = 'hidden';
+
+      // Start fly on next two frames (allows transition to register)
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        clone.style.left = toRect.left + 'px';
+        clone.style.top  = toRect.top  + 'px';
+      }));
+
+      setTimeout(() => {
+        clone.remove();
+        toEl.style.visibility = '';
+      }, 580);
+    });
+
+    setTimeout(advanceDay, 4000);
+  }, fillDuration);
+}
+
+function advanceStory(sid, log) {
+  const story = G.stories[sid];
+  const loc = story.lane;
+  const isExp = story.expedite;
+  const nextMap = {
+    'analysis':     'analysisDone',
+    'development':  'devDone',
+    'test':         'deployed',
+    'expAnalysis':     'expAnalysisDone',
+    'expDevelopment':  'expDevDone',
+    'expTest':         'expDeployed',
+  };
+  const next = nextMap[loc];
+  if (!next) return;
+
+  if (next === 'deployed' || next === 'expDeployed') {
+    story.deployedDay = G.day;
+    G.ctHistory.push({ id: story.id, days: G.day - (story.enteredDay || G.day) + 1 });
+    applyFixedDateBonus(story);
+    applyIntangibleBuff(story);
+    applyExpediteBonus(story);
+    log.push(`<span class="log-dep">★ ${story.id} ВЫПУЩЕНА в День ${G.day}!</span>`);
+  } else {
+    const stageNames = { analysisDone:'Анализ готово', development:'Разработка', devDone:'Разработка готово', test:'Тестирование', deployed:'Выпущено', expAnalysisDone:'Срочный — Анализ готово', expDevelopment:'Срочный — Разработка', expDevDone:'Срочный — Разработка готово', expTest:'Срочный — Тестирование', expDeployed:'Срочный — Выпущено' };
+    log.push(`<span class="log-adv">→ ${story.id} перешла в ${stageNames[next] || next}</span>`);
+  }
+  moveTo(sid, next);
+}
+
+function applyFixedDateBonus(story) {
+  if (story.type !== 'f') return;
+  const onTime = story.deployedDay <= story.dueDay;
+  if (onTime && story.val > 0) {
+    G.revenue += story.val;
+    toast(`✅ ${story.id} delivered on time! +$${story.val} bonus`);
+  } else if (!onTime && story.val > 0) {
+    toast(`❌ ${story.id} missed deadline (Day ${story.dueDay}) — no bonus`);
+  } else if (!onTime && story.val < 0) {
+    G.revenue += story.val; // negative penalty for late delivery
+    toast(`⚠️ ${story.id} delivered late — $${Math.abs(story.val)} penalty!`);
+  } else {
+    // on time + negative val: avoid the penalty — good!
+    toast(`✅ ${story.id} delivered before Day ${story.dueDay} — penalty avoided!`);
+  }
+}
+
+function applyIntangibleBuff(story) {
+  if (story.type !== 'i' || !story.buff) return;
+  G.buffs[story.buff] = (G.buffs[story.buff] || 0) + 1;
+  const buffNames2 = { analyst:'аналитики', developer:'разработчики', tester:'тестировщики' };
+  toast(`${story.id} выпущена — ${buffNames2[story.buff] || story.buff} получают +1 к броску!`);
+}
+
+function applyExpediteBonus(story) {
+  if (story.type !== 'e') return;
+  const onTime = story.deployedDay <= story.dueDay;
+  if (onTime && story.val > 0) {
+    G.revenue += story.val;
+    toast(`⚡ ${story.id} expedite delivered on time! +$${story.val.toLocaleString()} bonus!`);
+  } else if (!onTime && story.val > 0) {
+    toast(`⚡ ${story.id} expedite delivered late — no bonus.`);
+  } else if (story.val < 0) {
+    G.revenue += story.val;
+    toast(`⚡ ${story.id} expedite penalty: -$${Math.abs(story.val).toLocaleString()}!`);
+  }
+}
+
+function advanceDay() {
+  G.day++;
+  G.workDone = false;
+
+  // Check for expedite stories appearing
+  STORIES.filter(s => s.type === 'e' && s.appearDay === G.day).forEach(s => {
+    const story = G.stories[s.id];
+    if (story.lane === 'hidden') {
+      addSid('expBacklog', s.id);
+      story.lane = 'expBacklog';
+      toast(`⚡ Срочная история ${s.id} появилась! (Срок: День ${s.dueDay})`);
+    }
+  });
+
+  document.getElementById('btn-start').disabled = false;
+  hideWorkLog();
+
+  if (G.day > 35) {
+    endGame();
+    return;
+  }
+
+  // Show day notification
+  showDayNotify();
+
+  render();
+}
+
+function endGame() {
+  // Final revenue for deployed stories on last day
+  recordChartData();
+  render();
+  showGameOver();
+}
+
+// ===================================================
+//  CHART DATA
+// ===================================================
+function recordChartData() {
+  const d = G.day;
+  G.cfdHistory.push({
+    day: d,
+    backlog:  G.backlog.length,
+    ready:    G.ready.length,
+    analysis: G.analysis.length + G.analysisDone.length,
+    dev:      G.development.length + G.devDone.length,
+    test:     G.test.length,
+    deployed: G.deployed.length + G.expDeployed.length,
+  });
+  G.revHistory.push({ day: d, cumRev: G.revenue, dailyRev: G.dailyRev });
+}
+
+// ===================================================
+//  RENDER
+// ===================================================
+function render() {
+  renderHeader();
+  renderBacklog();
+  renderLane('lane-ready',        G.ready,        'ready');
+  renderLane('lane-analysis',     G.analysis,     'analysis');
+  renderLane('lane-analysis-done',G.analysisDone, 'analysisDone');
+  renderLane('lane-development',  G.development,  'development');
+  renderLane('lane-dev-done',     G.devDone,      'devDone');
+  renderLane('lane-test',         G.test,         'test');
+  renderLane('lane-deployed',     G.deployed,     'deployed');
+  renderExpedite();
+  renderWorkerPool();
+  renderWipHeaders();
+}
+
+function renderHeader() {
+  document.getElementById('hdr-day').textContent = `Day ${G.day}`;
+  document.getElementById('hdr-rev').textContent = `$${G.revenue.toLocaleString()}`;
+}
+
+function renderWipHeaders() {
+  const ra = G.analysis.length + G.analysisDone.length;
+  const rd = G.development.length + G.devDone.length;
+  const rt = G.test.length;
+  const rr = G.ready.length;
+
+  function cls(val, max) { return val > max ? ' wip-over' : ''; }
+
+  document.getElementById('sh-ready').innerHTML =
+    `Готово к работе <span class="${cls(rr,WIP.ready)}">(${rr}/5)</span>`;
+  document.getElementById('sh-analysis').innerHTML =
+    `Анализ <span class="${cls(ra,WIP.analysis)}">(${ra}/3)</span>
+    <div class="sh-sub"><div class="sh-sub-cell">В работе</div><div class="sh-sub-cell">Готово</div></div>`;
+  document.getElementById('sh-development').innerHTML =
+    `Разработка <span class="${cls(rd,WIP.development)}">(${rd}/5)</span>
+    <div class="sh-sub"><div class="sh-sub-cell">В работе</div><div class="sh-sub-cell">Готово</div></div>`;
+  document.getElementById('sh-test').innerHTML =
+    `Тестирование <span class="${cls(rt,WIP.test)}">(${rt}/3)</span>`;
+}
+
+function renderBacklog() {
+  const el = document.getElementById('lane-backlog');
+  const types = [
+    { type:'f', label:'Фиксированная дата', pullFn: () => pullFromBacklog('f') },
+    { type:'s', label:'Стандартная',         pullFn: () => pullFromBacklog('s') },
+    { type:'i', label:'Нематериальная',      pullFn: () => pullFromBacklog('i') },
+  ];
+
+  let html = '';
+  types.forEach(({ type, label, pullFn }) => {
+    const ids = G.backlog.filter(id => G.stories[id].type === type);
+    if (ids.length === 0) { html += `<div class="bl-section"><div class="bl-title">${label}</div><div style="text-align:center;color:#ccc;font-size:10px;margin-bottom:6px">—</div></div>`; return; }
+    const topStory = G.stories[ids[0]];
+    html += `<div class="bl-section">
+      <div class="bl-title">${label}</div>
+      <div class="bl-stack" draggable="true" ondragstart="dragStart(event,'${ids[0]}')" ondragend="dragEnd(event)" onclick="pullFromBacklog('${type}')">
+        ${ids.length > 1 ? '<div class="bl-shadow" style="top:4px;left:4px"></div>' : ''}
+        ${ids.length > 2 ? '<div class="bl-shadow" style="top:8px;left:8px"></div>' : ''}
+        <div class="card card-${topStory.type} bl-top">${cardHTML(topStory, true)}</div>
+        ${ids.length > 1 ? `<div class="bl-stack-count">ещё ${ids.length} →</div>` : ''}
+      </div>
+    </div>`;
+  });
+
+  el.innerHTML = html;
+}
+
+function renderLane(elId, sids, laneKey) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.innerHTML = sids.map(sid => {
+    const story = G.stories[sid];
+    const canClick = !!selectedWorker;
+    const isDone = laneKey === 'analysisDone' || laneKey === 'devDone';
+    let extra = '';
+    if (isDone) {
+      const toLane = laneKey === 'analysisDone' ? 'development' : 'test';
+      const ok = canPullTo(toLane);
+      extra = `<button class="pull-btn" onclick="pullCard('${sid}')" ${ok ? '' : 'disabled'}>→ Взять</button>`;
+    }
+    if (laneKey === 'ready') {
+      extra = `<button class="pull-btn" onclick="pullCard('${sid}')">→ Начать анализ</button>`;
+    }
+    const arrived = window._arrivedCards?.has(sid) ? ' card-arrived' : '';
+    return `<div class="card card-${story.type} ${canClick && activeBar(story) >= 0 ? 'clickable' : ''}${arrived}"
+      draggable="true" ondragstart="dragStart(event,'${sid}')" ondragend="dragEnd(event)"
+      ondragover="workerDragOver(event)" ondrop="workerDrop(event,'${sid}')"
+      onclick="assignToStory('${sid}')"
+      data-sid="${sid}">
+      ${cardHTML(story, false)}
+      ${extra}
+    </div>`;
+  }).join('');
+}
+
+function renderExpedite() {
+  const expLanes = [
+    ['exp-backlog',      G.expBacklog,      'expBacklog'],
+    ['exp-ready',        G.expReady,        'expReady'],
+    ['exp-analysis',     G.expAnalysis,     'expAnalysis'],
+    ['exp-analysis-done',G.expAnalysisDone, 'expAnalysisDone'],
+    ['exp-development',  G.expDevelopment,  'expDevelopment'],
+    ['exp-dev-done',     G.expDevDone,      'expDevDone'],
+    ['exp-test',         G.expTest,         'expTest'],
+    ['exp-deployed',     G.expDeployed,     'expDeployed'],
+  ];
+  expLanes.forEach(([elId, sids, laneKey]) => {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    if (laneKey === 'expBacklog') {
+      el.innerHTML = sids.length > 0
+        ? `<div class="bl-stack" style="margin:4px auto" draggable="true" ondragstart="dragStart(event,'${sids[0]}')" ondragend="dragEnd(event)" onclick="pullExpediteFromBacklog()">${cardHTML(G.stories[sids[0]], true)}</div>`
+        : '';
+      return;
+    }
+    const isDone = laneKey === 'expAnalysisDone' || laneKey === 'expDevDone';
+    el.innerHTML = sids.map(sid => {
+      const story = G.stories[sid];
+      let extra = '';
+      if (isDone) extra = `<button class="pull-btn" onclick="pullCard('${sid}')">→ Взять</button>`;
+      if (laneKey === 'expReady') extra = `<button class="pull-btn" onclick="pullCard('${sid}')">→ Начать анализ</button>`;
+      const arrived = window._arrivedCards?.has(sid) ? ' card-arrived' : '';
+      return `<div class="card card-${story.type} ${selectedWorker && activeBar(story)>=0 ? 'clickable' : ''}${arrived}"
+        draggable="true" ondragstart="dragStart(event,'${sid}')" ondragend="dragEnd(event)"
+        ondragover="workerDragOver(event)" ondrop="workerDrop(event,'${sid}')"
+        onclick="assignToStory('${sid}')" data-sid="${sid}">
+        ${cardHTML(story, false)}${extra}</div>`;
+    }).join('');
+  });
+}
+
+function renderWorkerPool() {
+  const pool = document.getElementById('worker-pool');
+  pool.innerHTML = '';
+  G.workers.forEach(w => {
+    const el = document.createElement('div');
+    el.className = `worker ${w.type}${selectedWorker === w.id ? ' w-selected' : ''}`;
+    el.title = `${w.id.toUpperCase()} (${w.type})${w.assigned ? ' → ' + w.assigned : ''}`;
+    el.dataset.wid = w.id;
+    el.innerHTML = workerIcon(w.type);
+    el.draggable = true;
+    el.addEventListener('dragstart', e => {
+      e.dataTransfer.setData('text/plain', 'worker:' + w.id);
+      e.dataTransfer.effectAllowed = 'copy';
+      window._dragValidTarget = null;
+    });
+    el.addEventListener('dragend', dragEnd);
+    if (w.assigned) {
+      el.style.opacity = '0.5';
+      el.style.cursor = 'not-allowed';
+      el.title = `${w.id} назначен на ${w.assigned} — нажмите для снятия`;
+      el.onclick = () => unassignWorker(w.id);
+    } else {
+      el.onclick = () => selectWorker(w.id);
+    }
+    pool.appendChild(el);
+  });
+
+  // Show buffs
+  const buffNames = { analyst:'аналитик', developer:'разработчик', tester:'тестировщик' };
+  const buffInfo = Object.entries(G.buffs).filter(([,v]) => v > 0).map(([k,v]) => `${buffNames[k]}+${v}`).join(' ');
+  if (buffInfo) {
+    const b = document.createElement('span');
+    b.style.cssText = 'font-size:9px;color:#5cb85c;margin-left:5px';
+    b.textContent = '🎯 ' + buffInfo;
+    pool.appendChild(b);
+  }
+}
+
+function workerIcon(type) {
+  return type === 'analyst' ? '👩' : type === 'developer' ? '👨‍💻' : '🤓';
+}
+
+function cardHTML(story, compact) {
+  // Header
+  const hdrLeft = story.id;
+  let hdrRight = '';
+  if (story.type === 's' || story.type === 'e') hdrRight = `$${story.val}`;
+  else if (story.type === 'f') hdrRight = story.val >= 0 ? `$${story.val}` : `$${story.val}`;
+
+  // Description
+  let desc = '';
+  if (story.type === 's') desc = 'Стандартная история';
+  else if (story.type === 'f') {
+    const overdue = story.dueDay && G && G.day > story.dueDay && story.lane !== 'deployed';
+    desc = `<span class="${overdue ? 'overdue' : 'due-desc'}">Срок: День ${story.dueDay}</span>`;
+  }
+  else if (story.type === 'i') desc = story.name;
+  else if (story.type === 'e') desc = `<span class="due-desc">Срок: День ${story.dueDay}</span>`;
+
+  // Bars
+  function bar(remaining, total, cls, barIdx) {
+    let html = '';
+    const done = total - remaining;
+    const newStart = window._newlyFilledBlocks?.[story.id]?.[barIdx] ?? -1;
+    for (let i = 0; i < done; i++) {
+      const isNew = newStart >= 0 && i >= newStart;
+      const delay = isNew ? (i - newStart) * 620 : 0;
+      html += `<div class="blk blk-${cls}${isNew ? ` blk-new-${cls}` : ''}"${isNew ? ` style="animation-delay:${delay}ms"` : ''}></div>`;
+    }
+    for (let i = 0; i < remaining; i++) html += `<div class="blk blk-empty"></div>`;
+    return html;
+  }
+
+  const barsHtml = `<div class="bars">
+    <div class="pbar">${bar(story.wr[0], story.w[0], 'a', 0)}</div>
+    <div class="pbar">${bar(story.wr[1], story.w[1], 'd', 1)}</div>
+    <div class="pbar">${bar(story.wr[2], story.w[2], 't', 2)}</div>
+  </div>`;
+
+  // Footer
+  const age = story.age || 0;
+  const footer = story.enteredDay
+    ? `${age} ${age === 1 ? 'день' : age >= 2 && age <= 4 ? 'дня' : 'дней'}`
+    : 'Доступна';
+
+  // Worker badges on card (multiple workers)
+  const workerBadge = !compact && story.assignedWorkers && story.assignedWorkers.length > 0
+    ? `<div class="card-workers">${story.assignedWorkers.map(wid => {
+        const w = G.workers.find(ww => ww.id === wid);
+        return w ? `<div class="worker ${w.type} w-small" data-wid="${wid}" title="Снять ${wid}" draggable="true" ondragstart="event.stopPropagation();event.dataTransfer.setData('text/plain','worker:${wid}');event.dataTransfer.effectAllowed='move';" onclick="event.stopPropagation();unassignWorker('${wid}')">${workerIcon(w.type)}</div>` : '';
+      }).join('')}</div>`
+    : '';
+
+  return `<div class="card-hdr"><span class="card-id">${hdrLeft}</span><span class="card-val">${hdrRight}</span></div>
+    <div class="card-desc ${story.type === 'f' || story.type === 'e' ? 'due-desc' : ''}">${desc}</div>
+    ${barsHtml}
+    ${workerBadge}
+    <div class="card-footer">${footer}</div>`;
+}
+
+// ===================================================
+//  DRAG & DROP
+// ===================================================
+function dragStart(event, sid) {
+  event.dataTransfer.setData('text/plain', sid);
+  event.dataTransfer.effectAllowed = 'move';
+  // Highlight valid drop targets
+  const story = G.stories[sid];
+  const validTarget = VALID_MOVES[story ? story.lane : ''];
+  document.querySelectorAll('.lane').forEach(el => {
+    el.addEventListener('dragenter', onDragEnter);
+    el.addEventListener('dragleave', onDragLeave);
+  });
+  window._dragValidTarget = validTarget;
+}
+
+function onDragEnter(e) {
+  const laneId = this.id;
+  // Map element id to laneKey
+  const idToLane = {
+    'lane-ready':'ready','lane-analysis':'analysis','lane-analysis-done':'analysisDone',
+    'lane-development':'development','lane-dev-done':'devDone','lane-test':'test',
+    'exp-ready':'expReady','exp-analysis':'expAnalysis','exp-analysis-done':'expAnalysisDone',
+    'exp-development':'expDevelopment','exp-dev-done':'expDevDone','exp-test':'expTest',
+  };
+  if (idToLane[laneId] === window._dragValidTarget) this.classList.add('drop-target');
+}
+
+function onDragLeave(e) {
+  this.classList.remove('drop-target');
+}
+
+function dragEnd(event) {
+  document.querySelectorAll('.lane.drop-target').forEach(el => el.classList.remove('drop-target'));
+  document.querySelectorAll('.lane').forEach(el => {
+    el.removeEventListener('dragenter', onDragEnter);
+    el.removeEventListener('dragleave', onDragLeave);
+  });
+  window._dragValidTarget = null;
+}
+
+// Valid forward moves: fromLane → toLane
+const VALID_MOVES = {
+  'backlog':        'ready',
+  'ready':          'analysis',
+  'analysisDone':   'development',
+  'devDone':        'test',
+  'expBacklog':     'expReady',
+  'expReady':       'expAnalysis',
+  'expAnalysisDone':'expDevelopment',
+  'expDevDone':     'expTest',
+};
+
+// Worker drops on cards
+function workerDragOver(event) {
+  event.preventDefault();
+  event.stopPropagation(); // don't let lane handle this
+}
+
+function workerDrop(event, sid) {
+  const data = event.dataTransfer.getData('text/plain');
+  if (!data.startsWith('worker:')) return; // only handle worker drops
+  event.preventDefault();
+  event.stopPropagation();
+  dragEnd(event);
+  const wid = data.slice(7);
+  assignWorkerToStory(wid, sid);
+}
+
+function dropCard(event, toLane) {
+  event.preventDefault();
+  const data = event.dataTransfer.getData('text/plain');
+  if (!data || data.startsWith('worker:')) return; // ignore worker drops
+  const story = G.stories[data];
+  if (!story) return;
+  const from = story.lane;
+
+  if (VALID_MOVES[from] !== toLane) {
+    toast('Недопустимое перемещение');
+    return;
+  }
+  if (!canPullTo(toLane)) {
+    toast('WIP-лимит достигнут!');
+    return;
+  }
+  moveTo(data, toLane);
+  render();
+}
+
+// ===================================================
+//  UI HELPERS
+// ===================================================
+function showWorkLog(lines) {
+  const el = document.getElementById('work-log');
+  el.innerHTML = lines.map(l => `<div>${l}</div>`).join('');
+  el.style.display = 'block';
+}
+function hideWorkLog() {
+  document.getElementById('work-log').style.display = 'none';
+}
+
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.display = 'block';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.style.display = 'none'; }, 3000);
+}
+
+function showDayNotify() {
+  const el = document.getElementById('day-notify');
+  document.getElementById('db-day').textContent = `День ${G.day}`;
+  document.getElementById('db-rev').textContent = `Дневная выручка: $${G.dailyRev.toLocaleString()}  |  Итого: $${G.revenue.toLocaleString()}`;
+  el.style.display = 'flex';
+  setTimeout(() => { el.style.display = 'none'; }, 1500);
+}
+
+function showHelp() { document.getElementById('help-overlay').style.display = 'flex'; }
+function hideHelp() { document.getElementById('help-overlay').style.display = 'none'; }
+
+function confirmExit() {
+  if (confirm('Выйти из игры? Весь прогресс будет потерян.')) newGame();
+}
+
+function hideGameOver() { document.getElementById('game-over').style.display = 'none'; }
+function showGameOver() {
+  const deployed = [...G.deployed, ...G.expDeployed].map(sid => G.stories[sid]);
+  const stdRev = deployed.filter(s => s.type === 's').reduce((sum, s) => sum + s.val * (35 - (s.deployedDay||35) + 1), 0);
+  const fixedBonuses = G.revenue - stdRev; // rough
+
+  document.getElementById('go-score').textContent = `$${G.revenue.toLocaleString()}`;
+  document.getElementById('go-table').innerHTML = `
+    <tr><td>Историй выпущено</td><td>${deployed.length}</td></tr>
+    <tr><td>Стандартных историй</td><td>${deployed.filter(s=>s.type==='s').length}</td></tr>
+    <tr><td>Сыграно дней</td><td>35</td></tr>
+    <tr><td>Итоговая выручка</td><td>$${G.revenue.toLocaleString()}</td></tr>
+  `;
+  document.getElementById('game-over').style.display = 'flex';
+}
+
+// ===================================================
+//  CHARTS
+// ===================================================
+function showCharts(type) {
+  currentChart = type || currentChart;
+  ['cfd','ct','fin'].forEach(t => {
+    document.getElementById('tab-' + t).className = 'chart-tab' + (t === currentChart ? ' active' : '');
+  });
+  document.getElementById('charts-overlay').style.display = 'flex';
+  renderChart(currentChart);
+}
+function hideCharts() { document.getElementById('charts-overlay').style.display = 'none'; }
+
+function renderChart(type) {
+  const canvas = document.getElementById('chart-canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (type === 'cfd') renderCFD(ctx, canvas);
+  else if (type === 'ct') renderCycleTime(ctx, canvas);
+  else if (type === 'fin') renderFinancial(ctx, canvas);
+}
+
+function renderCFD(ctx, canvas) {
+  const data = G.cfdHistory;
+  if (data.length === 0) { ctx.fillText('Данных пока нет', 10, 30); return; }
+  const W = canvas.width - 60, H = canvas.height - 50, OX = 50, OY = 10;
+  const maxVal = Math.max(...data.map(d => d.backlog + d.ready + d.analysis + d.dev + d.test + d.deployed));
+  const colors = ['#ddd','#fffbcc','#ffd080','#d9534f','#428bca','#5cb85c','#888'];
+  const labels = ['Бэклог','Готово к работе','Анализ','Разработка','Тест','Выпущено'];
+  const keys   = ['backlog','ready','analysis','dev','test','deployed'];
+
+  data.forEach((d, i) => {
+    const x = OX + (i / Math.max(data.length-1, 1)) * W;
+    let y = OY + H;
+    const vals = keys.map(k => d[k]);
+    vals.forEach((v, vi) => {
+      const h = (v / maxVal) * H;
+      ctx.fillStyle = colors[vi];
+      ctx.fillRect(x - (W / Math.max(data.length, 1) / 2), y - h, W / Math.max(data.length, 1), h);
+      y -= h;
+    });
+  });
+
+  // Axes
+  ctx.strokeStyle = '#999'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(OX, OY); ctx.lineTo(OX, OY+H); ctx.lineTo(OX+W, OY+H); ctx.stroke();
+  ctx.fillStyle = '#333'; ctx.font = '11px Arial';
+  ctx.fillText('День', OX + W/2 - 10, OY + H + 30);
+  ctx.save(); ctx.translate(14, OY + H/2); ctx.rotate(-Math.PI/2); ctx.fillText('Истории', -20, 0); ctx.restore();
+
+  // Legend
+  labels.forEach((l, i) => {
+    ctx.fillStyle = colors[i]; ctx.fillRect(OX + W - 100, OY + i*15, 12, 12);
+    ctx.fillStyle = '#333'; ctx.fillText(l, OX + W - 84, OY + i*15 + 10);
+  });
+}
+
+function renderCycleTime(ctx, canvas) {
+  const data = G.ctHistory;
+  ctx.fillStyle = '#333'; ctx.font = '12px Arial';
+  if (data.length === 0) { ctx.fillText('Историй ещё не выпущено.', 40, 50); return; }
+  const W = canvas.width - 80, H = canvas.height - 60, OX = 60, OY = 20;
+  const maxDays = Math.max(...data.map(d => d.days), 10);
+
+  ctx.strokeStyle = '#eee'; ctx.lineWidth = 1;
+  for (let y = 0; y <= 5; y++) {
+    const yy = OY + H - (y/5)*H;
+    ctx.beginPath(); ctx.moveTo(OX, yy); ctx.lineTo(OX+W, yy); ctx.stroke();
+    ctx.fillStyle='#999'; ctx.fillText(Math.round(y/5*maxDays), 5, yy+4);
+  }
+
+  data.forEach((d, i) => {
+    const x = OX + (i / Math.max(data.length-1, 1)) * W;
+    const y = OY + H - (d.days / maxDays) * H;
+    ctx.fillStyle = '#428bca';
+    ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#555'; ctx.font = '8px Arial';
+    ctx.fillText(d.id, x-8, y-8);
+  });
+
+  ctx.strokeStyle = '#999'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(OX, OY); ctx.lineTo(OX, OY+H); ctx.lineTo(OX+W, OY+H); ctx.stroke();
+  ctx.fillStyle = '#333'; ctx.font = '11px Arial';
+  ctx.fillText('Выпущенные истории (по порядку)', OX + W/2 - 70, OY + H + 30);
+  ctx.save(); ctx.translate(14, OY + H/2); ctx.rotate(-Math.PI/2); ctx.fillText('Время цикла (дни)', -40, 0); ctx.restore();
+}
+
+function renderFinancial(ctx, canvas) {
+  const data = G.revHistory;
+  ctx.fillStyle = '#333'; ctx.font = '12px Arial';
+  if (data.length === 0) { ctx.fillText('Данных пока нет.', 40, 50); return; }
+  const W = canvas.width - 80, H = canvas.height - 60, OX = 60, OY = 20;
+  const maxRev = Math.max(...data.map(d => d.cumRev), 1000);
+
+  // Grid
+  for (let y = 0; y <= 5; y++) {
+    const yy = OY + H - (y/5)*H;
+    ctx.strokeStyle = '#eee'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(OX, yy); ctx.lineTo(OX+W, yy); ctx.stroke();
+    ctx.fillStyle = '#999'; ctx.font = '10px Arial';
+    ctx.fillText('$'+Math.round(y/5*maxRev/1000)+'k', 2, yy+4);
+  }
+
+  // Revenue area
+  ctx.beginPath(); ctx.moveTo(OX, OY+H);
+  data.forEach((d, i) => {
+    const x = OX + (i / Math.max(data.length-1, 1)) * W;
+    const y = OY + H - (d.cumRev / maxRev) * H;
+    ctx.lineTo(x, y);
+  });
+  ctx.lineTo(OX + W, OY+H); ctx.closePath();
+  ctx.fillStyle = 'rgba(92,184,92,0.3)'; ctx.fill();
+  ctx.strokeStyle = '#5cb85c'; ctx.lineWidth = 2; ctx.stroke();
+
+  // Axes
+  ctx.strokeStyle = '#999'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(OX, OY); ctx.lineTo(OX, OY+H); ctx.lineTo(OX+W, OY+H); ctx.stroke();
+  ctx.fillStyle = '#333'; ctx.font = '11px Arial';
+  ctx.fillText('День', OX + W/2 - 10, OY + H + 30);
+  ctx.save(); ctx.translate(14, OY + H/2); ctx.rotate(-Math.PI/2); ctx.fillText('Накопленная выручка', -50, 0); ctx.restore();
+}
+
+// ===================================================
+//  INIT
+// ===================================================
+document.addEventListener('DOMContentLoaded', () => {
+  newGame();
+});
+</script>
+</body>
+</html>
