@@ -171,7 +171,8 @@ function renderWorkerPool() {
 }
 
 function workerIcon(type) {
-  return type === 'analyst' ? '👩' : type === 'developer' ? '👨‍💻' : '🤓';
+  const map = { analyst: 'img/analyst.png', developer: 'img/developer.png', tester: 'img/tester.png' };
+  return `<img src="${map[type]}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
 }
 
 function cardHTML(story, compact) {
