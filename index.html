@@ -18,7 +18,7 @@
   </div>
   <div class="info-box">
     <div style="font-size:10px;color:#888">Выручка</div>
-    <div class="info-value" id="hdr-rev">$0</div>
+    <div class="info-value" id="hdr-rev">0 ₽</div>
   </div>
   <div id="standup-area" ondragover="event.preventDefault()" ondrop="workerDropToPool(event)">
     <div class="standup-lbl">Стендап</div>
@@ -123,6 +123,33 @@
       <div class="chart-tab" id="tab-fin" onclick="showCharts('fin')">Финансы</div>
     </div>
     <canvas id="chart-canvas" width="670" height="350" style="border:1px solid #eee;border-radius:3px"></canvas>
+  </div>
+</div>
+
+<!-- End of Day Modal -->
+<div id="eod-overlay" class="overlay" style="display:none">
+  <div class="modal">
+    <div class="modal-hdr orange">
+      <span id="eod-day">Конец дня</span>
+    </div>
+    <div id="eod-body" style="line-height:1.7;padding:6px 0"></div>
+    <div class="modal-foot">
+      <button class="btn btn-green" onclick="hideEndOfDayModal()">Продолжить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Unassigned Worker Warning -->
+<div id="unassigned-warning" class="overlay" style="display:none">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-hdr" style="background:#e67e22">
+      Предупреждение
+    </div>
+    <p style="padding:14px 0 10px">Есть свободные сотрудники, которые не назначены ни на одну историю. Начать работу без них?</p>
+    <div class="modal-foot" style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" style="background:#ccc" onclick="document.getElementById('unassigned-warning').style.display='none';G.warnShown=false">Назад</button>
+      <button class="btn btn-green" onclick="document.getElementById('unassigned-warning').style.display='none';startWork()">Начать</button>
+    </div>
   </div>
 </div>
 

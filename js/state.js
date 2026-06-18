@@ -16,11 +16,19 @@ function mkStory(def) {
     assignedWorkers: [],
     lane: def.type === 'e' ? 'hidden' : 'backlog',
     expedite: def.type === 'e',
+    blocker: false,
+    blockerRemaining: 0,
+    blockerTotal: 0,
   };
 }
 
 function newGame() {
   hideGameOver();
+  WIP.ready = 5;
+  WIP.analysis = 3;
+  WIP.development = 5;
+  WIP.test = 3;
+  WIP.expedite = 1;
   const stories = STORIES.map(mkStory);
 
   G = {
@@ -51,16 +59,23 @@ function newGame() {
     expTest:        [],
     expDeployed:    [],
 
+    carlosPolicy: false,
+    lockdown: false,
+    warnShown: false,
+
     workers: [
-      {id:'a1', type:'analyst',   assigned:null},
-      {id:'a2', type:'analyst',   assigned:null},
-      {id:'a3', type:'analyst',   assigned:null},
-      {id:'d1', type:'developer', assigned:null},
-      {id:'d2', type:'developer', assigned:null},
-      {id:'d3', type:'developer', assigned:null},
-      {id:'t1', type:'tester',    assigned:null},
-      {id:'t2', type:'tester',    assigned:null},
-      {id:'t3', type:'tester',    assigned:null},
+      {id:'a1', type:'analyst',   active:true,  assigned:null},
+      {id:'a2', type:'analyst',   active:true,  assigned:null},
+      {id:'a3', type:'analyst',   active:false, assigned:null},
+      {id:'a4', type:'analyst',   active:false, assigned:null},
+      {id:'d1', type:'developer', active:true,  assigned:null},
+      {id:'d2', type:'developer', active:true,  assigned:null},
+      {id:'d3', type:'developer', active:false, assigned:null},
+      {id:'d4', type:'developer', active:false, assigned:null},
+      {id:'t1', type:'tester',    active:true,  assigned:null},
+      {id:'t2', type:'tester',    active:true,  assigned:null},
+      {id:'t3', type:'tester',    active:true,  assigned:null},
+      {id:'t4', type:'tester',    active:false, assigned:null},
     ],
 
     // Chart data

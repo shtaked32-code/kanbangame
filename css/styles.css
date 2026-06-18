@@ -72,6 +72,7 @@ body {
 .sh-ready      { width: 190px; }
 .sh-analysis   { width: 380px; color: #d9534f; }
 .sh-development{ width: 380px; color: #428bca; }
+/* sub-columns equal width */
 .sh-test       { width: 190px; color: #5cb85c; }
 .sh-deployed   { width: 190px; }
 .sh-sub { display: flex; border-top: 1px solid #eee; }
@@ -114,10 +115,10 @@ body {
 }
 .lane-backlog      { width: 155px; background: #f8f8f8; }
 .lane-ready        { width: 190px; }
-.lane-analysis     { width: 205px; }
-.lane-analysis-done{ width: 175px; background: #fbfbfb; }
-.lane-development  { width: 205px; }
-.lane-dev-done     { width: 175px; background: #fbfbfb; }
+.lane-analysis     { width: 190px; }
+.lane-analysis-done{ width: 190px; background: #fbfbfb; }
+.lane-development  { width: 190px; }
+.lane-dev-done     { width: 190px; background: #fbfbfb; }
 .lane-test         { width: 190px; }
 .lane-deployed     { width: 190px; }
 .lane.drop-target  { background: #e0f0ff !important; outline: 2px dashed #428bca; }
@@ -141,15 +142,20 @@ body {
 .bl-stack:hover .bl-top { filter: brightness(0.95); }
 
 /* ===== CARDS ===== */
+.card-slot {
+  margin: 15px 0;
+}
 .card {
   width: 100%;
   border-radius: 3px;
   padding: 10px;
-  margin: 3px 0;
   position: relative;
   font-size: 10px;
   cursor: default;
   box-shadow: 1px 1px 3px rgba(0,0,0,0.15);
+  box-sizing: border-box;
+  height: 135px;
+  overflow: hidden;
 }
 .card.card-s { background: #fffbcc; border: 1.5px dashed #c8bb00; }
 .card.card-f { background: #eedcff; border: 1.5px dashed #9060cc; }
@@ -339,3 +345,36 @@ body {
 
 /* Wip over */
 .wip-over { color: #d9534f !important; }
+
+/* Defect badge (blocker) */
+.defect-badge {
+  background: linear-gradient(160deg, #c0392b, #8b0000);
+  border-radius: 3px;
+  border: 1px solid #7a0000;
+  padding: 5px 6px 6px;
+  margin: 2px 0 3px;
+  text-align: center;
+}
+.defect-title {
+  color: white;
+  font-size: 11px;
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+.defect-bar {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 3px;
+  justify-content: center;
+}
+.defect-bar .blk-empty { background: rgba(0,0,0,0.4); border-color: rgba(0,0,0,0.5); }
+.blk-blocker { background: rgba(255,255,255,0.7); border: 1px solid rgba(255,255,255,0.9); border-radius: 1px; }
+@keyframes fillBlocker {
+  0%   { background: rgba(0,0,0,0.4); }
+  100% { background: rgba(255,255,255,0.7); }
+}
+.blk-new-blocker { animation: fillBlocker 0.56s ease-in-out both; }
+
+/* Orange modal header (End of Day) */
+.modal-hdr.orange { background: #e67e22; }

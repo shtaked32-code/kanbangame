@@ -17,8 +17,8 @@ function render() {
 }
 
 function renderHeader() {
-  document.getElementById('hdr-day').textContent = `Day ${G.day}`;
-  document.getElementById('hdr-rev').textContent = `$${G.revenue.toLocaleString()}`;
+  document.getElementById('hdr-day').textContent = `День ${G.day}`;
+  document.getElementById('hdr-rev').textContent = `${G.revenue.toLocaleString('ru-RU')} ₽`;
 }
 
 function renderWipHeaders() {
@@ -30,7 +30,7 @@ function renderWipHeaders() {
   function cls(val, max) { return val > max ? ' wip-over' : ''; }
 
   document.getElementById('sh-ready').innerHTML =
-    `Готово к работе <span class="${cls(rr,WIP.ready)}">(${rr}/5)</span>`;
+    `Готово к работе <span class="${cls(rr,WIP.ready)}">(${rr}/${WIP.ready})</span>`;
   document.getElementById('sh-analysis').innerHTML =
     `Анализ <span class="${cls(ra,WIP.analysis)}">(${ra}/3)</span>
     <div class="sh-sub"><div class="sh-sub-cell">В работе</div><div class="sh-sub-cell">Готово</div></div>`;
@@ -88,12 +88,14 @@ function renderLane(elId, sids, laneKey) {
       extra = `<button class="pull-btn" onclick="pullCard('${sid}')">→ Начать анализ</button>`;
     }
     const arrived = window._arrivedCards?.has(sid) ? ' card-arrived' : '';
-    return `<div class="card card-${story.type} ${canClick && activeBar(story) >= 0 ? 'clickable' : ''}${arrived}"
-      draggable="true" ondragstart="dragStart(event,'${sid}')" ondragend="dragEnd(event)"
-      ondragover="workerDragOver(event)" ondrop="workerDrop(event,'${sid}')"
-      onclick="assignToStory('${sid}')"
-      data-sid="${sid}">
-      ${cardHTML(story, false)}
+    return `<div class="card-slot">
+      <div class="card card-${story.type} ${canClick && activeBar(story) >= 0 ? 'clickable' : ''}${arrived}"
+        draggable="true" ondragstart="dragStart(event,'${sid}')" ondragend="dragEnd(event)"
+        ondragover="workerDragOver(event)" ondrop="workerDrop(event,'${sid}')"
+        onclick="assignToStory('${sid}')"
+        data-sid="${sid}">
+        ${cardHTML(story, false)}
+      </div>
       ${extra}
     </div>`;
   }).join('');
@@ -126,11 +128,15 @@ function renderExpedite() {
       if (isDone) extra = `<button class="pull-btn" onclick="pullCard('${sid}')">→ Взять</button>`;
       if (laneKey === 'expReady') extra = `<button class="pull-btn" onclick="pullCard('${sid}')">→ Начать анализ</button>`;
       const arrived = window._arrivedCards?.has(sid) ? ' card-arrived' : '';
-      return `<div class="card card-${story.type} ${selectedWorker && activeBar(story)>=0 ? 'clickable' : ''}${arrived}"
-        draggable="true" ondragstart="dragStart(event,'${sid}')" ondragend="dragEnd(event)"
-        ondragover="workerDragOver(event)" ondrop="workerDrop(event,'${sid}')"
-        onclick="assignToStory('${sid}')" data-sid="${sid}">
-        ${cardHTML(story, false)}${extra}</div>`;
+      return `<div class="card-slot">
+        <div class="card card-${story.type} ${selectedWorker && activeBar(story)>=0 ? 'clickable' : ''}${arrived}"
+          draggable="true" ondragstart="dragStart(event,'${sid}')" ondragend="dragEnd(event)"
+          ondragover="workerDragOver(event)" ondrop="workerDrop(event,'${sid}')"
+          onclick="assignToStory('${sid}')" data-sid="${sid}">
+          ${cardHTML(story, false)}
+        </div>
+        ${extra}
+      </div>`;
     }).join('');
   });
 }
@@ -138,7 +144,7 @@ function renderExpedite() {
 function renderWorkerPool() {
   const pool = document.getElementById('worker-pool');
   pool.innerHTML = '';
-  G.workers.forEach(w => {
+  G.workers.filter(w => w.active).forEach(w => {
     const el = document.createElement('div');
     el.className = `worker ${w.type}${selectedWorker === w.id ? ' w-selected' : ''}`;
     el.title = `${w.id.toUpperCase()} (${w.type})${w.assigned ? ' → ' + w.assigned : ''}`;
@@ -162,15 +168,6 @@ function renderWorkerPool() {
     pool.appendChild(el);
   });
 
-  // Show buffs
-  const buffNames = { analyst:'аналитик', developer:'разработчик', tester:'тестировщик' };
-  const buffInfo = Object.entries(G.buffs).filter(([,v]) => v > 0).map(([k,v]) => `${buffNames[k]}+${v}`).join(' ');
-  if (buffInfo) {
-    const b = document.createElement('span');
-    b.style.cssText = 'font-size:9px;color:#5cb85c;margin-left:5px';
-    b.textContent = '🎯 ' + buffInfo;
-    pool.appendChild(b);
-  }
 }
 
 function workerIcon(type) {
@@ -180,8 +177,8 @@ function workerIcon(type) {
 function cardHTML(story, compact) {
   const hdrLeft = story.id;
   let hdrRight = '';
-  if (story.type === 's' || story.type === 'e') hdrRight = `$${story.val}`;
-  else if (story.type === 'f') hdrRight = `$${story.val}`;
+  if (story.type === 's' || story.type === 'e') hdrRight = `${story.val.toLocaleString('ru-RU')} ₽`;
+  else if (story.type === 'f') hdrRight = `${story.val.toLocaleString('ru-RU')} ₽`;
 
   let desc = '';
   if (story.type === 's') desc = 'Стандартная история';
@@ -195,21 +192,16 @@ function cardHTML(story, compact) {
   function bar(remaining, total, cls, barIdx) {
     let html = '';
     const done = total - remaining;
-    const newStart = window._newlyFilledBlocks?.[story.id]?.[barIdx] ?? -1;
+    const segments = window._newlyFilledBlocks?.[story.id]?.[barIdx] || [];
     for (let i = 0; i < done; i++) {
-      const isNew = newStart >= 0 && i >= newStart;
-      const delay = isNew ? (i - newStart) * 620 : 0;
+      const seg = segments.find(s => i >= s.start && i < s.start + s.count);
+      const isNew = !!seg;
+      const delay = isNew ? (i - seg.start) * 620 + seg.baseDelay : 0;
       html += `<div class="blk blk-${cls}${isNew ? ` blk-new-${cls}` : ''}"${isNew ? ` style="animation-delay:${delay}ms"` : ''}></div>`;
     }
     for (let i = 0; i < remaining; i++) html += `<div class="blk blk-empty"></div>`;
     return html;
   }
-
-  const barsHtml = `<div class="bars">
-    <div class="pbar">${bar(story.wr[0], story.w[0], 'a', 0)}</div>
-    <div class="pbar">${bar(story.wr[1], story.w[1], 'd', 1)}</div>
-    <div class="pbar">${bar(story.wr[2], story.w[2], 't', 2)}</div>
-  </div>`;
 
   const age = story.age || 0;
   const footer = story.enteredDay
@@ -223,9 +215,34 @@ function cardHTML(story, compact) {
       }).join('')}</div>`
     : '';
 
+  let middleHtml;
+  if (story.blocker && story.blockerTotal > 0) {
+    const total = story.blockerTotal;
+    const done = total - story.blockerRemaining;
+    const segments = window._newlyFilledBlocks?.[story.id]?.[3] || [];
+    let bHtml = '';
+    for (let i = 0; i < done; i++) {
+      const seg = segments.find(s => i >= s.start && i < s.start + s.count);
+      const isNew = !!seg;
+      const delay = isNew ? (i - seg.start) * 620 + seg.baseDelay : 0;
+      bHtml += `<div class="blk blk-blocker${isNew ? ' blk-new-blocker' : ''}"${isNew ? ` style="animation-delay:${delay}ms"` : ''}></div>`;
+    }
+    for (let i = 0; i < story.blockerRemaining; i++) bHtml += `<div class="blk blk-empty"></div>`;
+    middleHtml = `<div class="defect-badge">
+      <div class="defect-title">Серьёзный дефект</div>
+      <div class="defect-bar">${bHtml}</div>
+    </div>`;
+  } else {
+    middleHtml = `<div class="bars">
+      <div class="pbar">${bar(story.wr[0], story.w[0], 'a', 0)}</div>
+      <div class="pbar">${bar(story.wr[1], story.w[1], 'd', 1)}</div>
+      <div class="pbar">${bar(story.wr[2], story.w[2], 't', 2)}</div>
+    </div>`;
+  }
+
   return `<div class="card-hdr"><span class="card-id">${hdrLeft}</span><span class="card-val">${hdrRight}</span></div>
     <div class="card-desc ${story.type === 'f' || story.type === 'e' ? 'due-desc' : ''}">${desc}</div>
-    ${barsHtml}
+    ${middleHtml}
     ${workerBadge}
     <div class="card-footer">${footer}</div>`;
 }

@@ -26,6 +26,23 @@ function isSpecialist(workerType, lane) {
   return false;
 }
 
+function canAssignWorker(worker, story) {
+  if (!worker || !worker.active) return false;
+  const bar = activeBar(story);
+  if (bar < 0) return false;
+  // Blocked stories bypass all restrictions
+  if (story.blocker) return true;
+  // Carlos policy: only testers in test lanes; testers only in test lanes
+  if (G.carlosPolicy) {
+    const inTest = story.lane === 'test' || story.lane === 'expTest';
+    if (inTest  && worker.type !== 'tester') return false;
+    if (!inTest && worker.type === 'tester') return false;
+  }
+  // Lockdown: only specialists in their column
+  if (G.lockdown && !isSpecialist(worker.type, story.lane)) return false;
+  return true;
+}
+
 function removeSid(laneKey, sid) {
   G[laneKey] = G[laneKey].filter(id => id !== sid);
 }
@@ -79,7 +96,7 @@ function pullCard(sid) {
 }
 
 function pullFromBacklog(type) {
-  if (!canPullTo('ready')) { toast('Достигнут WIP-лимит «Готово к работе» (макс. 5)'); return; }
+  if (!canPullTo('ready')) { toast(`Достигнут WIP-лимит «Готово к работе» (макс. ${WIP.ready})`); return; }
   const sid = G.backlog.find(id => G.stories[id].type === type);
   if (!sid) { toast('В бэклоге больше нет историй типа ' + type.toUpperCase()); return; }
   moveTo(sid, 'ready');
@@ -106,6 +123,12 @@ function assignWorkerToStory(wid, sid) {
   const story = G.stories[sid];
   const worker = G.workers.find(w => w.id === wid);
   if (!worker || !story) return;
+  if (!canAssignWorker(worker, story)) {
+    if (!worker.active) { toast('Сотрудник недоступен'); return; }
+    if (G.carlosPolicy) { toast('Политика Карлоса: только тестировщики тестируют'); return; }
+    if (G.lockdown)     { toast('Карантин: только специалисты работают в своей колонке'); return; }
+    toast('Назначение невозможно'); return;
+  }
   const bar = activeBar(story);
   if (bar < 0) { toast('У этой истории нет активного этапа работы'); return; }
   if (worker.assigned === sid) {
@@ -144,6 +167,14 @@ function unassignWorker(wid) {
 // ===================================================
 function startWork() {
   if (G.workDone) return;
+  const unassigned = G.workers.filter(w => w.active && !w.assigned);
+  if (unassigned.length > 0 && !G.warnShown) {
+    G.warnShown = true;
+    document.getElementById('unassigned-warning').style.display = 'flex';
+    return;
+  }
+  G.warnShown = false;
+  document.getElementById('unassigned-warning').style.display = 'none';
   G.workDone = true;
   document.getElementById('btn-start').disabled = true;
 
@@ -151,46 +182,103 @@ function startWork() {
   const workerNames = { analyst:'Аналитик', developer:'Разработчик', tester:'Тестировщик' };
   const workerEmoji = { analyst:'🔴', developer:'🔵', tester:'🟢' };
 
-  // Snapshot work remaining before applying work
-  const wrBefore = {};
-  G.workers.forEach(w => {
-    if (w.assigned && G.stories[w.assigned]) {
-      wrBefore[w.assigned] = [...G.stories[w.assigned].wr];
-    }
-  });
-
-  // Process each assigned worker — collect pending advances instead of calling immediately
+  // Process each worker sequentially — track per-worker fill segments for staggered animation
+  window._newlyFilledBlocks = {};
   const pendingAdvances = [];
-  G.workers.forEach(worker => {
-    if (!worker.assigned) return;
-    const story = G.stories[worker.assigned];
-    if (!story) return;
-    const bar = activeBar(story);
-    if (bar < 0) return;
+  let cumulativeDelay = 0; // each worker's blocks start after all previous workers finish
 
-    const spec = isSpecialist(worker.type, story.lane);
-    let work, rollDesc;
-    if (spec) {
-      const r1 = Math.floor(Math.random() * 6) + 1;
-      const r2 = Math.floor(Math.random() * 6) + 1;
-      work = r1 + r2;
-      rollDesc = `2d6: ${r1}+${r2}=${work}`;
-    } else {
-      const r1 = Math.floor(Math.random() * 6) + 1;
-      work = r1;
-      rollDesc = `1d6: ${r1}`;
-    }
+  // Iterate stories left-to-right, top-to-bottom, then workers per story
+  const laneOrder = [
+    'expAnalysis','expAnalysisDone','expDevelopment','expDevDone','expTest',
+    'analysis','analysisDone','development','devDone','test',
+  ];
+  laneOrder.forEach(lane => {
+    (G[lane] || []).forEach(sid => {
+      const story = G.stories[sid];
+      if (!story) return;
+      const assignedHere = G.workers.filter(w => w.assigned === sid);
 
-    // Apply buff bonus
-    work += G.buffs[worker.type] || 0;
-    story.wr[bar] = Math.max(0, story.wr[bar] - work);
+      if (story.blocker && story.blockerRemaining > 0) {
+        assignedHere.forEach(worker => {
+          const prevCleared = story.blockerTotal - story.blockerRemaining;
+          const r1 = Math.floor(Math.random() * 6) + 1;
+          const overflow = Math.max(0, r1 - story.blockerRemaining);
+          story.blockerRemaining = Math.max(0, story.blockerRemaining - r1);
+          const currCleared = story.blockerTotal - story.blockerRemaining;
+          const filled = currCleared - prevCleared;
 
-    const cls = worker.type === 'analyst' ? 'log-a' : worker.type === 'developer' ? 'log-d' : 'log-t';
-    log.push(`<span class="${cls}">${workerEmoji[worker.type]} ${worker.id.toUpperCase()}</span> → ${story.id}: ${rollDesc} = <strong>${work}</strong> работы`);
+          const cls = worker.type === 'analyst' ? 'log-a' : worker.type === 'developer' ? 'log-d' : 'log-t';
+          log.push(`<span class="${cls}">${workerEmoji[worker.type]} ${worker.id.toUpperCase()}</span> → ${story.id} (дефект): 1d6: ${r1}`);
 
-    if (story.wr[bar] === 0) {
-      pendingAdvances.push(story.id);
-    }
+          if (filled > 0) {
+            if (!window._newlyFilledBlocks[story.id]) window._newlyFilledBlocks[story.id] = {};
+            if (!window._newlyFilledBlocks[story.id][3]) window._newlyFilledBlocks[story.id][3] = [];
+            window._newlyFilledBlocks[story.id][3].push({ start: prevCleared, count: filled, baseDelay: cumulativeDelay });
+            cumulativeDelay += (filled - 1) * 620 + 560 + 80;
+          }
+
+          if (story.blockerRemaining === 0) {
+            story.blocker = false;
+            // Оверфлоу идёт в бары задачи
+            if (overflow > 0) {
+              const barIdx = activeBar(story);
+              if (barIdx >= 0) {
+                const prevDone = story.w[barIdx] - story.wr[barIdx];
+                story.wr[barIdx] = Math.max(0, story.wr[barIdx] - overflow);
+                const overflowFilled = (story.w[barIdx] - story.wr[barIdx]) - prevDone;
+                if (overflowFilled > 0) {
+                  if (!window._newlyFilledBlocks[story.id]) window._newlyFilledBlocks[story.id] = {};
+                  if (!window._newlyFilledBlocks[story.id][barIdx]) window._newlyFilledBlocks[story.id][barIdx] = [];
+                  window._newlyFilledBlocks[story.id][barIdx].push({ start: prevDone, count: overflowFilled, baseDelay: cumulativeDelay });
+                  cumulativeDelay += (overflowFilled - 1) * 620 + 560 + 80;
+                }
+                if (story.wr[barIdx] === 0 && !pendingAdvances.includes(sid)) pendingAdvances.push(sid);
+              }
+            }
+          }
+        });
+        return;
+      }
+
+      const bar = activeBar(story);
+      if (bar < 0) return;
+      assignedHere.forEach(worker => {
+        const prevDone = story.w[bar] - story.wr[bar];
+
+        const spec = isSpecialist(worker.type, story.lane);
+        let work, rollDesc;
+        if (spec) {
+          const r1 = Math.floor(Math.random() * 6) + 1;
+          const r2 = Math.floor(Math.random() * 6) + 1;
+          work = r1 + r2;
+          rollDesc = `2d6: ${r1}+${r2}=${work}`;
+        } else {
+          const r1 = Math.floor(Math.random() * 6) + 1;
+          work = r1;
+          rollDesc = `1d6: ${r1}`;
+        }
+
+        work += G.buffs[worker.type] || 0;
+        story.wr[bar] = Math.max(0, story.wr[bar] - work);
+
+        const currDone = story.w[bar] - story.wr[bar];
+        const filled = currDone - prevDone;
+
+        const cls = worker.type === 'analyst' ? 'log-a' : worker.type === 'developer' ? 'log-d' : 'log-t';
+        log.push(`<span class="${cls}">${workerEmoji[worker.type]} ${worker.id.toUpperCase()}</span> → ${story.id}: ${rollDesc} = <strong>${work}</strong> работы`);
+
+        if (filled > 0) {
+          if (!window._newlyFilledBlocks[story.id]) window._newlyFilledBlocks[story.id] = {};
+          if (!window._newlyFilledBlocks[story.id][bar]) window._newlyFilledBlocks[story.id][bar] = [];
+          window._newlyFilledBlocks[story.id][bar].push({ start: prevDone, count: filled, baseDelay: cumulativeDelay });
+          cumulativeDelay += (filled - 1) * 620 + 560 + 80;
+        }
+
+        if (story.wr[bar] === 0 && !pendingAdvances.includes(sid)) {
+          pendingAdvances.push(sid);
+        }
+      });
+    });
   });
 
   // Age all in-pipeline stories
@@ -199,38 +287,7 @@ function startWork() {
     G.stories[sid].age = (G.stories[sid].age || 0) + 1;
   });
 
-  // Daily revenue from deployed standard stories
-  G.dailyRev = G.deployed.concat(G.expDeployed)
-    .filter(sid => G.stories[sid].type === 's')
-    .reduce((sum, sid) => sum + G.stories[sid].val, 0);
-  G.revenue += G.dailyRev;
-
-  // Compute newly filled blocks for animation
-  window._newlyFilledBlocks = {};
-  Object.entries(wrBefore).forEach(([sid, prevWr]) => {
-    const story = G.stories[sid];
-    if (!story) return;
-    [0, 1, 2].forEach(barIdx => {
-      const prevDone = story.w[barIdx] - prevWr[barIdx];
-      const currDone = story.w[barIdx] - story.wr[barIdx];
-      if (currDone > prevDone) {
-        if (!window._newlyFilledBlocks[sid]) window._newlyFilledBlocks[sid] = {};
-        window._newlyFilledBlocks[sid][barIdx] = prevDone;
-      }
-    });
-  });
-
-  // Compute how long fill animation takes (last block delay + animation duration + buffer)
-  let maxDelay = 0;
-  Object.entries(window._newlyFilledBlocks).forEach(([sid, bars]) => {
-    const story = G.stories[sid];
-    Object.entries(bars).forEach(([barIdx, newStart]) => {
-      const done = story.w[barIdx] - story.wr[barIdx];
-      const lastDelay = (done - 1 - newStart) * 620;
-      if (lastDelay > maxDelay) maxDelay = lastDelay;
-    });
-  });
-  const fillDuration = maxDelay + 560 + 200; // last block delay + anim duration + buffer
+  const fillDuration = cumulativeDelay + 200;
 
   // Record chart data (workers still assigned — unassign after animation)
   recordChartData();
@@ -265,6 +322,13 @@ function startWork() {
 
     // Advance stories in game state and re-render (badges gone, pool restored)
     pendingAdvances.forEach(sid => advanceStory(sid, []));
+
+    // Daily revenue counted after deploys so same-day deployments are included
+    G.dailyRev = G.deployed.concat(G.expDeployed)
+      .filter(sid => G.stories[sid].type === 's')
+      .reduce((sum, sid) => sum + G.stories[sid].val, 0);
+    G.revenue += G.dailyRev;
+
     render();
 
     // Capture pool TARGET positions after re-render
@@ -323,7 +387,7 @@ function startWork() {
       }, 580);
     });
 
-    setTimeout(advanceDay, 4000);
+    setTimeout(advanceDay, 1000);
   }, fillDuration);
 }
 
@@ -369,14 +433,14 @@ function applyFixedDateBonus(story) {
   const onTime = story.deployedDay <= story.dueDay;
   if (onTime && story.val > 0) {
     G.revenue += story.val;
-    toast(`✅ ${story.id} delivered on time! +$${story.val} bonus`);
+    toast(`✅ ${story.id} сдана в срок! +${story.val.toLocaleString('ru-RU')} ₽ бонус`);
   } else if (!onTime && story.val > 0) {
-    toast(`❌ ${story.id} missed deadline (Day ${story.dueDay}) — no bonus`);
+    toast(`❌ ${story.id} просрочена (День ${story.dueDay}) — бонус не начислен`);
   } else if (!onTime && story.val < 0) {
     G.revenue += story.val;
-    toast(`⚠️ ${story.id} delivered late — $${Math.abs(story.val)} penalty!`);
+    toast(`⚠️ ${story.id} сдана с опозданием — штраф ${Math.abs(story.val).toLocaleString('ru-RU')} ₽!`);
   } else {
-    toast(`✅ ${story.id} delivered before Day ${story.dueDay} — penalty avoided!`);
+    toast(`✅ ${story.id} сдана до Дня ${story.dueDay} — штраф избежан!`);
   }
 }
 
@@ -392,42 +456,157 @@ function applyExpediteBonus(story) {
   const onTime = story.deployedDay <= story.dueDay;
   if (onTime && story.val > 0) {
     G.revenue += story.val;
-    toast(`⚡ ${story.id} expedite delivered on time! +$${story.val.toLocaleString()} bonus!`);
+    toast(`⚡ ${story.id} срочная сдана вовремя! +${story.val.toLocaleString('ru-RU')} ₽ бонус!`);
   } else if (!onTime && story.val > 0) {
-    toast(`⚡ ${story.id} expedite delivered late — no bonus.`);
+    toast(`⚡ ${story.id} срочная сдана с опозданием — бонус не начислен.`);
   } else if (story.val < 0) {
     G.revenue += story.val;
-    toast(`⚡ ${story.id} expedite penalty: -$${Math.abs(story.val).toLocaleString()}!`);
+    toast(`⚡ ${story.id} штраф срочной: -${Math.abs(story.val).toLocaleString('ru-RU')} ₽!`);
   }
 }
 
 // ===================================================
 //  DAY ADVANCEMENT
 // ===================================================
+function findOverdueStories(day) {
+  const allLanes = [
+    ...G.ready, ...G.analysis, ...G.analysisDone,
+    ...G.development, ...G.devDone, ...G.test,
+    ...G.expBacklog, ...G.expReady, ...G.expAnalysis, ...G.expAnalysisDone,
+    ...G.expDevelopment, ...G.expDevDone, ...G.expTest,
+  ];
+  return allLanes
+    .map(sid => G.stories[sid])
+    .filter(s => s && (s.type === 'f' || s.type === 'e') && s.dueDay === day);
+}
+
+function removeOverdueStories(stories) {
+  stories.forEach(s => {
+    const lane = s.lane;
+    if (G[lane]) G[lane] = G[lane].filter(id => id !== s.id);
+    if (s.assignedWorkers && s.assignedWorkers.length) {
+      s.assignedWorkers.forEach(wid => {
+        const w = G.workers.find(w => w.id === wid);
+        if (w) w.assigned = null;
+      });
+      s.assignedWorkers = [];
+    }
+    if (s.val < 0) {
+      G.revenue += s.val;
+    }
+    s.lane = 'removed';
+  });
+}
+
+function buildOverdueHtml(stories) {
+  if (!stories.length) return '';
+  let html = '<hr style="margin:12px 0;border:none;border-top:1px solid #f0ad4e">';
+  html += '<p style="color:#c0392b;font-weight:bold">⚠️ Просроченные задачи сняты с доски:</p>';
+  stories.forEach(s => {
+    const penaltyText = s.val < 0
+      ? `штраф <strong>${Math.abs(s.val).toLocaleString('ru-RU')} ₽</strong>`
+      : 'бонус потерян';
+    html += `<p style="margin:4px 0">${s.id} (Срок: День ${s.dueDay}) — ${penaltyText}</p>`;
+  });
+  return html;
+}
+
 function advanceDay() {
+  const completedDay = G.day;
   G.day++;
   G.workDone = false;
 
-  // Check for expedite stories appearing
-  STORIES.filter(s => s.type === 'e' && s.appearDay === G.day).forEach(s => {
-    const story = G.stories[s.id];
-    if (story.lane === 'hidden') {
-      addSid('expBacklog', s.id);
-      story.lane = 'expBacklog';
-      toast(`⚡ Срочная история ${s.id} появилась! (Срок: День ${s.dueDay})`);
+  const event = DAY_EVENTS[completedDay];
+  const overdue = findOverdueStories(completedDay);
+
+  const continueAfterModal = () => {
+    if (event && event.effects.length) applyDayEffects(event.effects);
+    if (overdue.length) removeOverdueStories(overdue);
+
+    if (completedDay >= 35) {
+      recordChartData();
+      render();
+      showGameOver();
+      return;
+    }
+
+    STORIES.filter(s => s.type === 'e' && s.appearDay === G.day).forEach(s => {
+      const story = G.stories[s.id];
+      if (story.lane === 'hidden') {
+        addSid('expBacklog', s.id);
+        story.lane = 'expBacklog';
+        toast(`⚡ Срочная история ${s.id} появилась! (Срок: День ${s.dueDay})`);
+      }
+    });
+
+    document.getElementById('btn-start').disabled = false;
+    hideWorkLog();
+    showDayNotify();
+    render();
+  };
+
+  const eventMsg = event ? event.msg : '';
+  const overdueMsg = buildOverdueHtml(overdue);
+  const fullMsg = eventMsg + overdueMsg;
+
+  if (fullMsg) {
+    showEndOfDayModal(completedDay, fullMsg, continueAfterModal);
+  } else {
+    continueAfterModal();
+  }
+}
+
+function applyDayEffects(effects) {
+  effects.forEach(eff => {
+    switch (eff.type) {
+      case 'workerOut': {
+        const w = G.workers.find(w => w.type === eff.workerType && w.active);
+        if (w) {
+          if (w.assigned) {
+            const s = G.stories[w.assigned];
+            if (s) s.assignedWorkers = s.assignedWorkers.filter(id => id !== w.id);
+            w.assigned = null;
+          }
+          w.active = false;
+        }
+        break;
+      }
+      case 'workerIn': {
+        const w = G.workers.find(w => w.type === eff.workerType && !w.active);
+        if (w) w.active = true;
+        break;
+      }
+      case 'blocker': {
+        const laneKey = eff.lane === 'test' ? 'test' : 'development';
+        const expLane = eff.lane === 'test' ? 'expTest' : 'expDevelopment';
+        const sid = G[laneKey][0] || G[expLane]?.[0];
+        if (sid) {
+          const total = 5 + Math.floor(Math.random() * 3); // 5-7 блоков
+          G.stories[sid].blocker = true;
+          G.stories[sid].blockerRemaining = total;
+          G.stories[sid].blockerTotal = total;
+          toast(`🚫 Серьёзный дефект на истории ${sid}!`);
+        }
+        break;
+      }
+      case 'wipChange':
+        WIP[eff.lane] = eff.value;
+        renderWipHeaders();
+        break;
+      case 'carlosOn':
+        G.carlosPolicy = true;
+        toast('⚠️ Политика Карлоса: только тестировщики тестируют!');
+        break;
+      case 'carlosOff':
+        G.carlosPolicy = false;
+        toast('✅ Политика Карлоса отменена');
+        break;
+      case 'lockdownOn':
+        G.lockdown = true;
+        toast('🔒 Карантин: только специалисты в своей колонке!');
+        break;
     }
   });
-
-  document.getElementById('btn-start').disabled = false;
-  hideWorkLog();
-
-  if (G.day > 35) {
-    endGame();
-    return;
-  }
-
-  showDayNotify();
-  render();
 }
 
 function endGame() {

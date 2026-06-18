@@ -23,13 +23,27 @@ function toast(msg) {
 function showDayNotify() {
   const el = document.getElementById('day-notify');
   document.getElementById('db-day').textContent = `День ${G.day}`;
-  document.getElementById('db-rev').textContent = `Дневная выручка: $${G.dailyRev.toLocaleString()}  |  Итого: $${G.revenue.toLocaleString()}`;
+  document.getElementById('db-rev').textContent = `Дневная выручка: ${G.dailyRev.toLocaleString('ru-RU')} ₽  |  Итого: ${G.revenue.toLocaleString('ru-RU')} ₽`;
   el.style.display = 'flex';
   setTimeout(() => { el.style.display = 'none'; }, 1500);
 }
 
 function showHelp() { document.getElementById('help-overlay').style.display = 'flex'; }
 function hideHelp() { document.getElementById('help-overlay').style.display = 'none'; }
+
+let _eodCallback = null;
+function showEndOfDayModal(day, msg, callback) {
+  _eodCallback = callback;
+  document.getElementById('eod-day').textContent = `Конец Дня ${day}`;
+  document.getElementById('eod-body').innerHTML = msg;
+  document.getElementById('eod-overlay').style.display = 'flex';
+}
+function hideEndOfDayModal() {
+  document.getElementById('eod-overlay').style.display = 'none';
+  const cb = _eodCallback;
+  _eodCallback = null;
+  if (cb) cb();
+}
 
 function confirmExit() {
   if (confirm('Выйти из игры? Весь прогресс будет потерян.')) newGame();
@@ -38,14 +52,13 @@ function confirmExit() {
 function hideGameOver() { document.getElementById('game-over').style.display = 'none'; }
 function showGameOver() {
   const deployed = [...G.deployed, ...G.expDeployed].map(sid => G.stories[sid]);
-  const stdRev = deployed.filter(s => s.type === 's').reduce((sum, s) => sum + s.val * (35 - (s.deployedDay||35) + 1), 0);
 
-  document.getElementById('go-score').textContent = `$${G.revenue.toLocaleString()}`;
+  document.getElementById('go-score').textContent = `${G.revenue.toLocaleString('ru-RU')} ₽`;
   document.getElementById('go-table').innerHTML = `
     <tr><td>Историй выпущено</td><td>${deployed.length}</td></tr>
     <tr><td>Стандартных историй</td><td>${deployed.filter(s=>s.type==='s').length}</td></tr>
     <tr><td>Сыграно дней</td><td>35</td></tr>
-    <tr><td>Итоговая выручка</td><td>$${G.revenue.toLocaleString()}</td></tr>
+    <tr><td>Итоговая выручка</td><td>${G.revenue.toLocaleString('ru-RU')} ₽</td></tr>
   `;
   document.getElementById('game-over').style.display = 'flex';
 }
