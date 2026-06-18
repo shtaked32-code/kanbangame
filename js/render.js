@@ -226,13 +226,13 @@ function cardHTML(story, compact) {
       const seg = segments.find(s => i >= s.start && i < s.start + s.count);
       const isNew = !!seg;
       const delay = isNew ? (i - seg.start) * 620 + seg.baseDelay : 0;
-      bHtml += `<div class="blk blk-blocker${isNew ? ' blk-new-blocker' : ''}"${isNew ? ` style="animation-delay:${delay}ms"` : ''}></div>`;
+      bHtml += `<div class="blk blk-a${isNew ? ' blk-new-a' : ''}"${isNew ? ` style="animation-delay:${delay}ms"` : ''}></div>`;
     }
     for (let i = 0; i < story.blockerRemaining; i++) bHtml += `<div class="blk blk-empty"></div>`;
     middleHtml = `<div class="defect-badge">
       <div class="defect-title">Серьёзный дефект</div>
-      <div class="defect-bar">${bHtml}</div>
-    </div>`;
+    </div>
+    <div class="bars"><div class="pbar">${bHtml}</div></div>`;
   } else {
     middleHtml = `<div class="bars">
       <div class="pbar">${bar(story.wr[0], story.w[0], 'a', 0)}</div>

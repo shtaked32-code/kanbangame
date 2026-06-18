@@ -120,5 +120,6 @@ function newGame() {
 
   selectedWorker = null;
   render();
+  recordChartData();
   showHelp();
 }
