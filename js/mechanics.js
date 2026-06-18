@@ -410,7 +410,7 @@ function advanceStory(sid, log) {
 
   if (next === 'deployed' || next === 'expDeployed') {
     story.deployedDay = G.day;
-    G.ctHistory.push({ id: story.id, days: G.day - (story.enteredDay || G.day) + 1 });
+    G.ctHistory.push({ id: story.id, days: G.day - (story.enteredDay || G.day) + 1, deployedDay: G.day });
     applyFixedDateBonus(story);
     applyIntangibleBuff(story);
     applyExpediteBonus(story);

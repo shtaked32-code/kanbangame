@@ -88,94 +88,163 @@ function renderChart(type) {
 
 function renderCFD(ctx, canvas) {
   const data = G.cfdHistory;
-  if (data.length === 0) { ctx.fillText('Данных пока нет', 10, 30); return; }
-  const W = canvas.width - 60, H = canvas.height - 50, OX = 50, OY = 10;
-  const maxVal = Math.max(...data.map(d => d.backlog + d.ready + d.analysis + d.dev + d.test + d.deployed));
-  const colors = ['#ddd','#fffbcc','#ffd080','#d9534f','#428bca','#5cb85c','#888'];
-  const labels = ['Бэклог','Готово к работе','Анализ','Разработка','Тест','Выпущено'];
-  const keys   = ['backlog','ready','analysis','dev','test','deployed'];
+  if (!data.length) { ctx.fillStyle='#333'; ctx.font='12px Arial'; ctx.fillText('Данных пока нет', 10, 30); return; }
+  const W = canvas.width - 70, H = canvas.height - 50, OX = 55, OY = 15;
 
-  data.forEach((d, i) => {
-    const x = OX + (i / Math.max(data.length-1, 1)) * W;
-    let y = OY + H;
-    keys.map(k => d[k]).forEach((v, vi) => {
-      const h = (v / maxVal) * H;
-      ctx.fillStyle = colors[vi];
-      ctx.fillRect(x - (W / Math.max(data.length, 1) / 2), y - h, W / Math.max(data.length, 1), h);
-      y -= h;
-    });
+  // layers bottom→top: deployed, test, dev, analysis, ready
+  const layers     = ['deployed','test','dev','analysis','ready'];
+  const fillColors = ['rgba(40,70,40,0.9)','rgba(92,184,92,0.55)','rgba(66,139,202,0.55)','rgba(217,83,79,0.55)','rgba(190,190,190,0.55)'];
+  const lineColors = ['#1e3e1e','#5cb85c','#428bca','#d9534f','#999'];
+  const labels     = ['Готово к работе','Анализ','Разработка','Тест','Выпущено'];
+
+  const cumTop = (d, li) => layers.slice(0, li+1).reduce((s,k) => s+d[k], 0);
+  const maxVal = Math.max(...data.map(d => cumTop(d, layers.length-1)), 1);
+  const step   = maxVal <= 20 ? 5 : maxVal <= 40 ? 5 : 10;
+  const gridMax = Math.ceil(maxVal / step) * step || step;
+
+  const xFor = i => OX + (i / Math.max(data.length-1, 1)) * W;
+  const yFor = v => OY + H - (v / gridMax) * H;
+
+  // grid
+  ctx.strokeStyle = '#ddd'; ctx.lineWidth = 0.5; ctx.font = '11px Arial'; ctx.textAlign = 'right';
+  for (let g = 0; g <= gridMax; g += step) {
+    const yy = yFor(g);
+    ctx.beginPath(); ctx.moveTo(OX, yy); ctx.lineTo(OX+W, yy); ctx.stroke();
+    ctx.fillStyle = '#666'; ctx.fillText(g, OX-5, yy+4);
+  }
+  ctx.textAlign = 'center';
+  data.forEach((d,i) => {
+    if (i===0 || d.day % 5 === 0 || i===data.length-1) {
+      const xx = xFor(i);
+      ctx.strokeStyle='#ddd'; ctx.beginPath(); ctx.moveTo(xx, OY); ctx.lineTo(xx, OY+H); ctx.stroke();
+      ctx.fillStyle='#666'; ctx.fillText(d.day, xx, OY+H+14);
+    }
   });
 
-  ctx.strokeStyle = '#999'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(OX, OY); ctx.lineTo(OX, OY+H); ctx.lineTo(OX+W, OY+H); ctx.stroke();
-  ctx.fillStyle = '#333'; ctx.font = '11px Arial';
-  ctx.fillText('День', OX + W/2 - 10, OY + H + 30);
-  ctx.save(); ctx.translate(14, OY + H/2); ctx.rotate(-Math.PI/2); ctx.fillText('Истории', -20, 0); ctx.restore();
+  // stacked areas
+  for (let li = layers.length-1; li >= 0; li--) {
+    ctx.beginPath();
+    data.forEach((d,i) => { const x=xFor(i), y=yFor(cumTop(d,li)); i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
+    for (let i=data.length-1; i>=0; i--) ctx.lineTo(xFor(i), yFor(li>0?cumTop(data[i],li-1):0));
+    ctx.closePath(); ctx.fillStyle = fillColors[li]; ctx.fill();
 
-  labels.forEach((l, i) => {
-    ctx.fillStyle = colors[i]; ctx.fillRect(OX + W - 100, OY + i*15, 12, 12);
-    ctx.fillStyle = '#333'; ctx.fillText(l, OX + W - 84, OY + i*15 + 10);
+    // line
+    ctx.beginPath();
+    data.forEach((d,i) => { const x=xFor(i),y=yFor(cumTop(d,li)); i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
+    ctx.strokeStyle=lineColors[li]; ctx.lineWidth=1.5; ctx.stroke();
+
+    // dots
+    data.forEach((d,i) => {
+      const x=xFor(i), y=yFor(cumTop(d,li));
+      ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2);
+      ctx.fillStyle='white'; ctx.fill();
+      ctx.strokeStyle=lineColors[li]; ctx.lineWidth=1.5; ctx.stroke();
+    });
+  }
+
+  // axes
+  ctx.strokeStyle='#888'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(OX,OY); ctx.lineTo(OX,OY+H); ctx.lineTo(OX+W,OY+H); ctx.stroke();
+
+  // legend top-left
+  ctx.textAlign='left';
+  [['Готово к работе',4],['Анализ',3],['Разработка',2],['Тест',1],['Выпущено',0]].forEach(([label,li],row) => {
+    const lx=OX+8, ly=OY+6+row*17;
+    ctx.fillStyle=fillColors[li]; ctx.fillRect(lx,ly,13,11);
+    ctx.strokeStyle=lineColors[li]; ctx.lineWidth=1; ctx.strokeRect(lx,ly,13,11);
+    ctx.fillStyle='#333'; ctx.font='11px Arial'; ctx.fillText(label, lx+17, ly+9);
   });
 }
 
 function renderCycleTime(ctx, canvas) {
   const data = G.ctHistory;
-  ctx.fillStyle = '#333'; ctx.font = '12px Arial';
-  if (data.length === 0) { ctx.fillText('Историй ещё не выпущено.', 40, 50); return; }
-  const W = canvas.width - 80, H = canvas.height - 60, OX = 60, OY = 20;
-  const maxDays = Math.max(...data.map(d => d.days), 10);
+  ctx.fillStyle='#333'; ctx.font='12px Arial'; ctx.textAlign='left';
+  if (!data.length) { ctx.fillText('Историй ещё не выпущено.', 40, 50); return; }
+  const W = canvas.width - 80, H = canvas.height - 60, OX = 55, OY = 15;
 
-  ctx.strokeStyle = '#eee'; ctx.lineWidth = 1;
-  for (let y = 0; y <= 5; y++) {
-    const yy = OY + H - (y/5)*H;
-    ctx.beginPath(); ctx.moveTo(OX, yy); ctx.lineTo(OX+W, yy); ctx.stroke();
-    ctx.fillStyle='#999'; ctx.fillText(Math.round(y/5*maxDays), 5, yy+4);
+  const maxCT = Math.max(...data.map(d=>d.days), 5);
+  const gridMax = Math.ceil(maxCT) + 1;
+
+  // grid every 1 unit
+  ctx.strokeStyle='#eee'; ctx.lineWidth=0.5; ctx.textAlign='right';
+  for (let g=0; g<=gridMax; g++) {
+    const yy = OY + H - (g/gridMax)*H;
+    ctx.beginPath(); ctx.moveTo(OX,yy); ctx.lineTo(OX+W,yy); ctx.stroke();
+    ctx.fillStyle='#666'; ctx.font='11px Arial'; ctx.fillText(g, OX-5, yy+4);
   }
 
-  data.forEach((d, i) => {
-    const x = OX + (i / Math.max(data.length-1, 1)) * W;
-    const y = OY + H - (d.days / maxDays) * H;
-    ctx.fillStyle = '#428bca';
-    ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#555'; ctx.font = '8px Arial';
-    ctx.fillText(d.id, x-8, y-8);
+  // group by deployed day
+  const byDay = {};
+  data.forEach(d => { const day=d.deployedDay||0; if(!byDay[day])byDay[day]=[]; byDay[day].push(d.days); });
+  const days = Object.keys(byDay).map(Number).sort((a,b)=>a-b);
+  const n = days.length;
+  const slotW = W / Math.max(n, 1);
+  const barW = Math.min(slotW * 0.35, 22);
+
+  days.forEach((day, di) => {
+    const bars = byDay[day];
+    const cx = OX + (di + 0.5) * slotW;
+    const totalBarW = bars.length * barW + (bars.length-1) * 2;
+    bars.forEach((ct, bi) => {
+      const x = cx - totalBarW/2 + bi*(barW+2);
+      const barH = (ct/gridMax)*H;
+      const y = OY + H - barH;
+      ctx.fillStyle='#bbb'; ctx.fillRect(x, y, barW, barH);
+      ctx.strokeStyle='#888'; ctx.lineWidth=0.5; ctx.strokeRect(x, y, barW, barH);
+    });
+    ctx.fillStyle='#555'; ctx.font='11px Arial'; ctx.textAlign='center';
+    ctx.fillText(day, cx, OY+H+14);
   });
 
-  ctx.strokeStyle = '#999'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(OX, OY); ctx.lineTo(OX, OY+H); ctx.lineTo(OX+W, OY+H); ctx.stroke();
-  ctx.fillStyle = '#333'; ctx.font = '11px Arial';
-  ctx.fillText('Выпущенные истории (по порядку)', OX + W/2 - 70, OY + H + 30);
-  ctx.save(); ctx.translate(14, OY + H/2); ctx.rotate(-Math.PI/2); ctx.fillText('Время цикла (дни)', -40, 0); ctx.restore();
+  // axes
+  ctx.strokeStyle='#888'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(OX,OY); ctx.lineTo(OX,OY+H); ctx.lineTo(OX+W,OY+H); ctx.stroke();
 }
 
 function renderFinancial(ctx, canvas) {
   const data = G.revHistory;
-  ctx.fillStyle = '#333'; ctx.font = '12px Arial';
-  if (data.length === 0) { ctx.fillText('Данных пока нет.', 40, 50); return; }
-  const W = canvas.width - 80, H = canvas.height - 60, OX = 60, OY = 20;
-  const maxRev = Math.max(...data.map(d => d.cumRev), 1000);
+  ctx.fillStyle='#333'; ctx.font='12px Arial'; ctx.textAlign='left';
+  if (!data.length) { ctx.fillText('Данных пока нет.', 40, 50); return; }
+  const W = canvas.width - 90, H = canvas.height - 60, OX = 80, OY = 15;
 
-  for (let y = 0; y <= 5; y++) {
-    const yy = OY + H - (y/5)*H;
-    ctx.strokeStyle = '#eee'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(OX, yy); ctx.lineTo(OX+W, yy); ctx.stroke();
-    ctx.fillStyle = '#999'; ctx.font = '10px Arial';
-    ctx.fillText('$'+Math.round(y/5*maxRev/1000)+'k', 2, yy+4);
+  const maxRev = Math.max(...data.map(d=>d.cumRev), 1000);
+  const magnitude = Math.pow(10, Math.floor(Math.log10(maxRev)) - 1);
+  const gridMax = Math.ceil(maxRev / magnitude / 5) * magnitude * 5;
+  const gridStep = gridMax / 5;
+
+  // grid
+  ctx.strokeStyle='#ddd'; ctx.lineWidth=0.5; ctx.textAlign='right';
+  for (let g=0; g<=5; g++) {
+    const val = g * gridStep;
+    const yy = OY + H - (val/gridMax)*H;
+    ctx.beginPath(); ctx.moveTo(OX,yy); ctx.lineTo(OX+W,yy); ctx.stroke();
+    const label = val >= 1000000 ? (val/1000000).toFixed(1)+'М ₽' : val >= 1000 ? Math.round(val/1000)+'К ₽' : val+'₽';
+    ctx.fillStyle='#666'; ctx.font='10px Arial'; ctx.fillText(label, OX-5, yy+4);
   }
 
-  ctx.beginPath(); ctx.moveTo(OX, OY+H);
+  // bars
+  const n = data.length;
+  const slotW = W / Math.max(n, 1);
+  const barW = Math.max(slotW * 0.7, 4);
   data.forEach((d, i) => {
-    const x = OX + (i / Math.max(data.length-1, 1)) * W;
-    const y = OY + H - (d.cumRev / maxRev) * H;
-    ctx.lineTo(x, y);
+    const x = OX + i*slotW + (slotW-barW)/2;
+    const barH = (d.cumRev/gridMax)*H;
+    const y = OY + H - barH;
+    ctx.fillStyle='rgba(92,184,92,0.7)'; ctx.fillRect(x, y, barW, barH);
+    ctx.strokeStyle='#5cb85c'; ctx.lineWidth=0.5; ctx.strokeRect(x, y, barW, barH);
+    if (i===0 || d.day%5===0 || i===n-1) {
+      ctx.fillStyle='#555'; ctx.font='11px Arial'; ctx.textAlign='center';
+      ctx.fillText(d.day, x+barW/2, OY+H+14);
+    }
   });
-  ctx.lineTo(OX + W, OY+H); ctx.closePath();
-  ctx.fillStyle = 'rgba(92,184,92,0.3)'; ctx.fill();
-  ctx.strokeStyle = '#5cb85c'; ctx.lineWidth = 2; ctx.stroke();
 
-  ctx.strokeStyle = '#999'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(OX, OY); ctx.lineTo(OX, OY+H); ctx.lineTo(OX+W, OY+H); ctx.stroke();
-  ctx.fillStyle = '#333'; ctx.font = '11px Arial';
-  ctx.fillText('День', OX + W/2 - 10, OY + H + 30);
-  ctx.save(); ctx.translate(14, OY + H/2); ctx.rotate(-Math.PI/2); ctx.fillText('Накопленная выручка', -50, 0); ctx.restore();
+  // legend
+  ctx.fillStyle='rgba(92,184,92,0.7)'; ctx.fillRect(OX+8, OY+6, 14, 12);
+  ctx.strokeStyle='#5cb85c'; ctx.lineWidth=1; ctx.strokeRect(OX+8, OY+6, 14, 12);
+  ctx.fillStyle='#333'; ctx.font='11px Arial'; ctx.textAlign='left';
+  ctx.fillText('Накопленная выручка', OX+26, OY+16);
+
+  // axes
+  ctx.strokeStyle='#888'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(OX,OY); ctx.lineTo(OX,OY+H); ctx.lineTo(OX+W,OY+H); ctx.stroke();
 }
