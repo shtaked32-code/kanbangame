@@ -1,2 +1,4 @@
 .DS_Store
 логика/
+server/node_modules/
+server/kangame.db

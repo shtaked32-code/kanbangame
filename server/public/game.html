@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Kanban Board Game</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<!-- HEADER -->
+<div id="game-header">
+  <div>
+    <div class="logo">Kanban<span class="sub">game</span><span class="version">v1.0</span></div>
+  </div>
+  <div class="info-box">
+    <div style="font-size:10px;color:#888">День</div>
+    <div class="info-value" id="hdr-day">1</div>
+  </div>
+  <div class="info-box">
+    <div style="font-size:10px;color:#888">Выручка</div>
+    <div class="info-value" id="hdr-rev">0 ₽</div>
+  </div>
+  <div id="standup-area" ondragover="event.preventDefault()" ondrop="workerDropToPool(event)">
+    <div class="standup-lbl">Стендап</div>
+    <div id="worker-pool"></div>
+  </div>
+  <button class="btn btn-green" id="btn-start" onclick="startWork()">Начать работу</button>
+  <button class="btn btn-chart" onclick="showCharts('cfd')" title="Кумулятивная диаграмма потока">📈</button>
+  <button class="btn btn-chart" onclick="showCharts('ct')"  title="Время цикла">⏱️</button>
+  <button class="btn btn-chart" onclick="showCharts('fin')" title="Финансовый график">💰</button>
+  <button class="btn btn-blue"  onclick="showHelp()">Помощь</button>
+  <button class="btn btn-red"   onclick="confirmExit()">Выход</button>
+</div>
+
+<!-- BOARD -->
+<div id="board-container">
+  <!-- Stage headers -->
+  <div id="stage-header">
+    <div style="width:22px;flex-shrink:0;border-right:1px solid #ddd;"></div>
+    <div class="sh sh-backlog">Бэклог</div>
+    <div class="sh sh-ready" id="sh-ready">Готово к работе (5)</div>
+    <div class="sh sh-analysis" id="sh-analysis">
+      Анализ (3)
+      <div class="sh-sub">
+        <div class="sh-sub-cell">В работе</div>
+        <div class="sh-sub-cell">Готово</div>
+      </div>
+    </div>
+    <div class="sh sh-development" id="sh-development">
+      Разработка (5)
+      <div class="sh-sub">
+        <div class="sh-sub-cell">В работе</div>
+        <div class="sh-sub-cell">Готово</div>
+      </div>
+    </div>
+    <div class="sh sh-test" id="sh-test">Тестирование (3)</div>
+    <div class="sh sh-deployed">Выпущено</div>
+  </div>
+
+  <!-- Expedite row -->
+  <div id="expedite-row">
+    <div class="expedite-label"><span>СРОЧНЫЕ (1)</span></div>
+    <div class="expedite-lanes">
+      <div class="lane lane-backlog"       id="exp-backlog"       style="background:#f2f2f2"></div>
+      <div class="lane lane-ready"         id="exp-ready"         style="background:#f2f2f2" ondragover="event.preventDefault()" ondrop="dropCard(event,'expReady')"></div>
+      <div class="lane lane-analysis"      id="exp-analysis"      style="background:#f2f2f2" ondragover="event.preventDefault()" ondrop="dropCard(event,'expAnalysis')"></div>
+      <div class="lane lane-analysis-done" id="exp-analysis-done" style="background:#f2f2f2" ondragover="event.preventDefault()" ondrop="dropCard(event,'expAnalysisDone')"></div>
+      <div class="lane lane-development"   id="exp-development"   style="background:#f2f2f2" ondragover="event.preventDefault()" ondrop="dropCard(event,'expDevelopment')"></div>
+      <div class="lane lane-dev-done"      id="exp-dev-done"      style="background:#f2f2f2" ondragover="event.preventDefault()" ondrop="dropCard(event,'expDevDone')"></div>
+      <div class="lane lane-test"          id="exp-test"          style="background:#f2f2f2" ondragover="event.preventDefault()" ondrop="dropCard(event,'expTest')"></div>
+      <div class="lane lane-deployed"      id="exp-deployed"      style="background:#f2f2f2"></div>
+    </div>
+  </div>
+
+  <!-- Standard row -->
+  <div id="standard-row">
+    <div style="width:22px;flex-shrink:0;background:#e4e4e4;border-right:1px solid #ccc;"></div>
+    <div class="lane lane-backlog"       id="lane-backlog"></div>
+    <div class="lane lane-ready"         id="lane-ready"         ondragover="event.preventDefault()" ondrop="dropCard(event,'ready')"></div>
+    <div class="lane lane-analysis"      id="lane-analysis"      ondragover="event.preventDefault()" ondrop="dropCard(event,'analysis')"></div>
+    <div class="lane lane-analysis-done" id="lane-analysis-done" ondragover="event.preventDefault()" ondrop="dropCard(event,'analysisDone')"></div>
+    <div class="lane lane-development"   id="lane-development"   ondragover="event.preventDefault()" ondrop="dropCard(event,'development')"></div>
+    <div class="lane lane-dev-done"      id="lane-dev-done"      ondragover="event.preventDefault()" ondrop="dropCard(event,'devDone')"></div>
+    <div class="lane lane-test"          id="lane-test"          ondragover="event.preventDefault()" ondrop="dropCard(event,'test')"></div>
+    <div class="lane lane-deployed"      id="lane-deployed"></div>
+  </div>
+</div>
+
+<!-- Work log -->
+<div id="work-log"></div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- Day notification -->
+<div id="day-notify">
+  <div class="day-banner">
+    <div class="db-day" id="db-day"></div>
+    <div class="db-rev"  id="db-rev"></div>
+  </div>
+</div>
+
+<!-- Game Over -->
+<div id="game-over">
+  <div class="go-box">
+    <h2>🎉 Игра окончена!</h2>
+    <div class="go-score" id="go-score"></div>
+    <table class="go-table" id="go-table"></table>
+    <div style="display:flex;gap:10px;margin-top:10px;justify-content:center">
+      <button class="btn btn-green" onclick="startNewGame()">Играть снова</button>
+      <button class="btn btn-blue"  onclick="window.location.href='dashboard.html'">В кабинет</button>
+    </div>
+  </div>
+</div>
+
+<!-- Charts overlay -->
+<div id="charts-overlay" onclick="if(event.target===this)hideCharts()">
+  <div class="charts-box">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <strong>Графики</strong>
+      <span style="cursor:pointer;font-size:20px" onclick="hideCharts()">×</span>
+    </div>
+    <div class="chart-tabs">
+      <div class="chart-tab" id="tab-cfd" onclick="showCharts('cfd')">CFD</div>
+      <div class="chart-tab" id="tab-ct"  onclick="showCharts('ct')">Cycle Time</div>
+      <div class="chart-tab" id="tab-fin" onclick="showCharts('fin')">Финансы</div>
+    </div>
+    <canvas id="chart-canvas" width="820" height="420" style="border:1px solid #eee;border-radius:3px;max-width:100%"></canvas>
+  </div>
+</div>
+
+<!-- End of Day Modal -->
+<div id="eod-overlay" class="overlay" style="display:none">
+  <div class="modal">
+    <div class="modal-hdr orange">
+      <span id="eod-day">Конец дня</span>
+    </div>
+    <div id="eod-body" style="line-height:1.7;padding:6px 0"></div>
+    <div class="modal-foot">
+      <button class="btn btn-green" onclick="hideEndOfDayModal()">Продолжить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Unassigned Worker Warning -->
+<div id="unassigned-warning" class="overlay" style="display:none">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-hdr" style="background:#e67e22">
+      Предупреждение
+    </div>
+    <p style="padding:14px 0 10px">Есть свободные сотрудники, которые не назначены ни на одну историю. Начать работу без них?</p>
+    <div class="modal-foot" style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" style="background:#ccc" onclick="document.getElementById('unassigned-warning').style.display='none';G.warnShown=false">Назад</button>
+      <button class="btn btn-green" onclick="document.getElementById('unassigned-warning').style.display='none';startWork()">Начать</button>
+    </div>
+  </div>
+</div>
+
+<!-- Help Modal -->
+<div id="help-overlay" class="overlay" style="display:none" onclick="if(event.target===this)hideHelp()">
+  <div class="modal">
+    <div class="modal-hdr">
+      Добро пожаловать
+      <span class="modal-x" onclick="hideHelp()">×</span>
+    </div>
+    <h3>Предыстория</h3>
+    <p>Ваша компания продаёт подписку на программный продукт. Игра начинается с 1-го дня. По мере выполнения историй вы добавляете новые возможности продукта и привлекаете подписчиков. Каждый день вы получаете доход от каждого подписчика.</p>
+    <h3>Цель</h3>
+    <p>Максимизировать прибыль. Вы зарабатываете выручку каждый день за каждую выпущенную Стандартную историю.</p>
+    <h3>Начало игры</h3>
+    <p>Нажмите на сотрудника в зоне «Стендап», чтобы выбрать его, затем нажмите на карточку истории для назначения. Также можно перетащить сотрудника на карточку мышью. После назначения всех нажмите <strong>Начать работу</strong>. Каждый день случайное число от 1 до 6 определяет объём выполненной работы. Специалисты в своей колонке получают двойной результат. Игра заканчивается после <strong>Дня 35</strong>.</p>
+    <h3>Перемещение карточек</h3>
+    <p>Кликайте по стопкам в Бэклоге, чтобы перетащить карточки в «Готово к работе». Карточки автоматически переходят на следующий этап, когда прогресс-бар заполнен. Используйте кнопки <strong>→ Взять</strong> для перемещения карточек из подколонок «Готово» в следующую колонку «В работе» (с учётом WIP-лимитов).</p>
+    <h3>Типы историй</h3>
+    <ul>
+      <li><span class="badge badge-s">S</span> <strong>Стандартная</strong> — жёлтая, привлекает подписчиков и генерирует ежедневную выручку</li>
+      <li><span class="badge badge-f">F</span> <strong>Фиксированная дата</strong> — фиолетовая, бонус при доставке до срока; штраф при опоздании</li>
+      <li><span class="badge badge-i">I</span> <strong>Нематериальная</strong> — зелёная, не приносит прямой выручки, но усиливает команду после выпуска</li>
+      <li><span class="badge badge-e">E</span> <strong>Срочная</strong> — синяя, использует срочную линию для наивысшего приоритета</li>
+    </ul>
+    <h3>WIP-лимиты</h3>
+    <ul>
+      <li><strong>Готово к работе:</strong> максимум 5 историй</li>
+      <li><strong>Анализ</strong> (в работе + готово): максимум 3 истории</li>
+      <li><strong>Разработка</strong> (в работе + готово): максимум 5 историй</li>
+      <li><strong>Тестирование:</strong> максимум 3 истории</li>
+    </ul>
+    <div class="modal-foot">
+      <button class="btn btn-green" onclick="hideHelp()">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+<!-- Scripts -->
+<script src="js/api.js"></script>
+<script src="js/data.js"></script>
+<script src="js/state.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/render.js"></script>
+<script src="js/mechanics.js"></script>
+<script src="js/dragdrop.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => { initGame(); });
+</script>
+</body>
+</html>

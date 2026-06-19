@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Kanban Game — Кабинет</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; }
+
+/* Header */
+.header { background: #1a1a2e; color: #fff; padding: 0 24px; height: 52px; display: flex; align-items: center; gap: 16px; }
+.header .logo { font-size: 18px; font-weight: 700; }
+.header .logo span { color: #e67e22; }
+.header .user-info { margin-left: auto; font-size: 13px; color: #aaa; }
+.header .user-info strong { color: #fff; }
+.btn-logout { background: none; border: 1px solid #555; color: #ccc; padding: 5px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; }
+.btn-logout:hover { border-color: #e67e22; color: #e67e22; }
+
+/* Layout */
+.container { max-width: 1000px; margin: 0 auto; padding: 24px 16px; }
+
+/* Tabs (admin) */
+.tabs { display: flex; gap: 0; border-bottom: 2px solid #ddd; margin-bottom: 24px; }
+.tab { padding: 10px 20px; cursor: pointer; font-size: 14px; font-weight: 600; color: #777; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+.tab.active { color: #e67e22; border-bottom-color: #e67e22; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* Cards / blocks */
+.block { background: #fff; border-radius: 8px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+.block-title { font-size: 16px; font-weight: 700; color: #333; margin-bottom: 16px; }
+
+/* Buttons */
+.btn { padding: 9px 18px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 600; }
+.btn-green  { background: #27ae60; color: #fff; }
+.btn-green:hover  { background: #219a52; }
+.btn-orange { background: #e67e22; color: #fff; }
+.btn-orange:hover { background: #d35400; }
+.btn-blue   { background: #2980b9; color: #fff; }
+.btn-blue:hover   { background: #2471a3; }
+.btn-red    { background: #c0392b; color: #fff; }
+.btn-red:hover    { background: #a93226; }
+.btn-gray   { background: #bdc3c7; color: #333; }
+.btn-gray:hover   { background: #a0a8ad; }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+
+/* Tables */
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; padding: 8px 10px; background: #f7f7f7; color: #555; font-weight: 600; border-bottom: 2px solid #eee; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+td { padding: 9px 10px; border-bottom: 1px solid #f0f0f0; color: #333; }
+tr:last-child td { border-bottom: none; }
+tr.my-row td { background: #fff8e1; font-weight: 600; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.badge-admin { background: #fadbd8; color: #922b21; }
+.badge-user  { background: #d5f5e3; color: #1e8449; }
+.badge-active   { background: #d6eaf8; color: #1a5276; }
+.badge-done     { background: #d5f5e3; color: #1e8449; }
+
+/* Session list */
+.session-item { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
+.session-item:last-child { border-bottom: none; }
+.session-meta { flex: 1; font-size: 13px; color: #666; }
+.session-meta strong { color: #333; display: block; font-size: 14px; }
+
+/* Modal */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; align-items: center; justify-content: center; }
+.modal-overlay.show { display: flex; }
+.modal-box { background: #fff; border-radius: 8px; padding: 28px 32px; width: 380px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+.modal-box h3 { margin-bottom: 16px; font-size: 16px; }
+.modal-box label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-top: 12px; margin-bottom: 4px; }
+.modal-box input, .modal-box select { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+.modal-foot { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+.error-msg { color: #c0392b; font-size: 13px; margin-top: 8px; min-height: 16px; }
+
+/* Empty state */
+.empty { text-align: center; color: #aaa; padding: 32px 0; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">Kanban<span>game</span></div>
+  <div class="user-info">
+    Вы вошли как <strong id="hdr-login">...</strong>
+    <span id="hdr-role-badge" style="margin-left:6px"></span>
+  </div>
+  <button class="btn-logout" onclick="doLogout()">Выйти</button>
+</div>
+
+<!-- ================================================ ADMIN ================================================ -->
+<div id="admin-view" class="container" style="display:none">
+  <div class="tabs">
+    <div class="tab active" onclick="adminTab('main')">Главная</div>
+    <div class="tab" onclick="adminTab('users')">Пользователи</div>
+    <div class="tab" onclick="adminTab('game')">Игра</div>
+  </div>
+
+  <!-- Главная -->
+  <div id="admin-main" class="tab-content active">
+    <div class="block">
+      <div class="block-title">Незавершённые сессии</div>
+      <table>
+        <thead><tr><th>Пользователь</th><th>Старт</th><th>День</th><th>Выручка</th><th></th></tr></thead>
+        <tbody id="active-sessions-body"></tbody>
+      </table>
+    </div>
+    <div class="block">
+      <div class="block-title">Топ завершённых игр</div>
+      <table>
+        <thead><tr><th>#</th><th>Пользователь</th><th>Выручка</th><th>Дата игры</th></tr></thead>
+        <tbody id="top-games-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Пользователи -->
+  <div id="admin-users" class="tab-content">
+    <div class="block">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div class="block-title" style="margin-bottom:0">Все пользователи</div>
+        <button class="btn btn-green btn-sm" onclick="openAddUser()">+ Добавить</button>
+      </div>
+      <table>
+        <thead><tr><th>Логин</th><th>Пароль</th><th>Роль</th><th>Последний вход</th><th>Макс. выручка</th><th></th></tr></thead>
+        <tbody id="users-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Игра -->
+  <div id="admin-game" class="tab-content">
+    <div class="block">
+      <div class="block-title">Игра</div>
+      <div id="admin-game-block"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================ PARTICIPANT ================================================ -->
+<div id="user-view" class="container" style="display:none">
+
+  <!-- Игра -->
+  <div class="block">
+    <div class="block-title">Игра</div>
+    <div id="user-game-block"></div>
+  </div>
+
+  <!-- Мои сессии -->
+  <div class="block">
+    <div class="block-title">Мои сессии</div>
+    <table>
+      <thead><tr><th>Статус</th><th>День</th><th>Выручка</th><th>Начата</th><th></th></tr></thead>
+      <tbody id="my-sessions-list"></tbody>
+    </table>
+  </div>
+
+  <!-- Лидерборд -->
+  <div class="block">
+    <div class="block-title">Лидерборд</div>
+    <table>
+      <thead><tr><th>#</th><th>Пользователь</th><th>Выручка</th><th>Дата игры</th></tr></thead>
+      <tbody id="leaderboard-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Модал: добавить пользователя -->
+<div id="add-user-modal" class="modal-overlay">
+  <div class="modal-box">
+    <h3>Новый пользователь</h3>
+    <label>Логин</label><input id="nu-login" type="text">
+    <label>Пароль</label><input id="nu-pass" type="text">
+    <label>Роль</label>
+    <select id="nu-role">
+      <option value="участник">участник</option>
+      <option value="admin">admin</option>
+    </select>
+    <div class="error-msg" id="nu-error"></div>
+    <div class="modal-foot">
+      <button class="btn btn-gray" onclick="closeModal('add-user-modal')">Отмена</button>
+      <button class="btn btn-green" onclick="submitAddUser()">Создать</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script>
+let currentUser = null;
+
+async function init() {
+  if (!requireAuthRedirect()) return;
+  try {
+    currentUser = await API.me();
+    setUser(currentUser);
+  } catch {
+    clearAuth(); window.location.href = 'login.html'; return;
+  }
+
+  document.getElementById('hdr-login').textContent = currentUser.login;
+  document.getElementById('hdr-role-badge').innerHTML =
+    currentUser.role === 'admin'
+      ? '<span class="badge badge-admin">admin</span>'
+      : '<span class="badge badge-user">участник</span>';
+
+  if (currentUser.role === 'admin') {
+    document.getElementById('admin-view').style.display = 'block';
+    loadAdminMain();
+  } else {
+    document.getElementById('user-view').style.display = 'block';
+    loadUserView();
+  }
+}
+
+// ================================================ ADMIN ================================================
+function adminTab(name) {
+  document.querySelectorAll('.tab').forEach((el, i) => {
+    const names = ['main','users','game'];
+    el.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.getElementById('admin-' + name).classList.add('active');
+
+  if (name === 'main')  loadAdminMain();
+  if (name === 'users') loadAdminUsers();
+  if (name === 'game')  loadAdminGame();
+}
+
+async function loadAdminMain() {
+  try {
+    const [rows, sessions] = await Promise.all([API.topGames(), API.getActiveSessions()]);
+
+    const atbody = document.getElementById('active-sessions-body');
+    if (!sessions.length) {
+      atbody.innerHTML = '<tr><td colspan="4" class="empty">Нет активных сессий</td></tr>';
+    } else {
+      atbody.innerHTML = sessions.map(s => `
+        <tr>
+          <td>${esc(s.user_login)}</td>
+          <td>${fmtDate(s.start_date)}</td>
+          <td>${s.current_day}</td>
+          <td>${s.revenue.toLocaleString('ru-RU')} ₽</td>
+          <td>${s.user_login === currentUser.login ? `<button class="btn btn-orange btn-sm" onclick="window.location.href='game.html?sid=${s.id}'">Продолжить</button>` : ''}</td>
+        </tr>
+      `).join('');
+    }
+
+    const tbody = document.getElementById('top-games-body');
+    if (!rows.length) { tbody.innerHTML = '<tr><td colspan="4" class="empty">Нет завершённых игр</td></tr>'; return; }
+    tbody.innerHTML = rows.map((r, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${esc(r.user_login)}</td>
+        <td>${r.revenue.toLocaleString('ru-RU')} ₽</td>
+        <td>${fmtDate(r.completed_at)}</td>
+      </tr>
+    `).join('');
+  } catch(e) { showErr('top-games-body', e); showErr('active-sessions-body', e); }
+}
+
+async function loadAdminUsers() {
+  try {
+    const users = await API.getUsers();
+    const tbody = document.getElementById('users-body');
+    if (!users.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty">Нет пользователей</td></tr>'; return; }
+    tbody.innerHTML = users.map(u => `
+      <tr>
+        <td>${esc(u.login)}</td>
+        <td><code>${esc(u.password)}</code></td>
+        <td>
+          <span class="badge ${u.role === 'admin' ? 'badge-admin' : 'badge-user'}">${esc(u.role)}</span>
+          ${u.id !== currentUser.id ? `<button class="btn btn-gray btn-sm" style="margin-left:6px" onclick="toggleRole(${u.id},'${u.role}')">
+            ${u.role === 'admin' ? '→ участник' : '→ admin'}
+          </button>` : ''}
+        </td>
+        <td>${u.last_login_at ? fmtDate(u.last_login_at) : '—'}</td>
+        <td>${u.max_revenue !== null ? u.max_revenue.toLocaleString('ru-RU') + ' ₽' : '—'}</td>
+        <td>${u.id !== currentUser.id ? `<button class="btn btn-red btn-sm" onclick="deleteUser(${u.id},'${esc(u.login)}')">Удалить</button>` : ''}</td>
+      </tr>
+    `).join('');
+  } catch(e) { showErr('users-body', e); }
+}
+
+async function toggleRole(id, currentRole) {
+  const newRole = currentRole === 'admin' ? 'участник' : 'admin';
+  if (!confirm(`Изменить роль на "${newRole}"?`)) return;
+  try {
+    await API.updateUserRole(id, newRole);
+    loadAdminUsers();
+  } catch(e) { alert(e.message); }
+}
+
+async function deleteUser(id, login) {
+  if (!confirm(`Удалить пользователя "${login}"? Игровые результаты сохранятся.`)) return;
+  try {
+    await API.deleteUser(id);
+    loadAdminUsers();
+  } catch(e) { alert(e.message); }
+}
+
+function openAddUser() {
+  document.getElementById('nu-login').value = '';
+  document.getElementById('nu-pass').value = '';
+  document.getElementById('nu-role').value = 'участник';
+  document.getElementById('nu-error').textContent = '';
+  document.getElementById('add-user-modal').classList.add('show');
+}
+
+async function submitAddUser() {
+  const login = document.getElementById('nu-login').value.trim();
+  const password = document.getElementById('nu-pass').value;
+  const role = document.getElementById('nu-role').value;
+  const errEl = document.getElementById('nu-error');
+  errEl.textContent = '';
+  try {
+    await API.createUser({ login, password, role });
+    closeModal('add-user-modal');
+    loadAdminUsers();
+  } catch(e) { errEl.textContent = e.message; }
+}
+
+
+async function loadAdminGame() {
+  const block = document.getElementById('admin-game-block');
+  try {
+    const sessions = await API.getMySessions();
+    const active = sessions.filter(s => s.status === 'in_progress');
+    if (active.length === 0) {
+      block.innerHTML = `<button class="btn btn-green" onclick="startNewGame()">Играть</button>`;
+    } else if (active.length === 1) {
+      block.innerHTML = `
+        <button class="btn btn-green" onclick="startNewGame()">Новая игра</button>
+        <button class="btn btn-orange" style="margin-left:10px" onclick="window.location.href='game.html?sid=${active[0].id}'">Продолжить (День ${active[0].current_day})</button>
+      `;
+    } else {
+      block.innerHTML = `
+        <button class="btn btn-green" onclick="startNewGame()" style="margin-bottom:14px">Новая игра</button>
+        <div style="font-size:13px;font-weight:600;color:#555;margin-bottom:8px">Выберите сессию:</div>
+        ${active.map(s => `
+          <div class="session-item">
+            <div class="session-meta">
+              <strong>День ${s.current_day} · ${s.revenue.toLocaleString('ru-RU')} ₽</strong>
+              Начата: ${fmtDate(s.start_date)}
+            </div>
+            <button class="btn btn-orange btn-sm" onclick="window.location.href='game.html?sid=${s.id}'">Продолжить</button>
+          </div>
+        `).join('')}
+      `;
+    }
+  } catch(e) { block.innerHTML = `<span style="color:#c0392b">${esc(e.message)}</span>`; }
+}
+
+// ================================================ PARTICIPANT ================================================
+async function loadUserView() {
+  await Promise.all([loadUserGame(), loadMySessions(), loadLeaderboard()]);
+}
+
+async function loadUserGame() {
+  const block = document.getElementById('user-game-block');
+  try {
+    const sessions = await API.getMySessions();
+    const active = sessions.filter(s => s.status === 'in_progress');
+    if (active.length === 0) {
+      block.innerHTML = `<button class="btn btn-green" onclick="startNewGame()">Играть</button>`;
+    } else if (active.length === 1) {
+      block.innerHTML = `
+        <button class="btn btn-green" onclick="startNewGame()">Новая игра</button>
+        <button class="btn btn-orange" style="margin-left:10px" onclick="window.location.href='game.html?sid=${active[0].id}'">Продолжить (День ${active[0].current_day})</button>
+      `;
+    } else {
+      block.innerHTML = `<button class="btn btn-green" onclick="startNewGame()">Новая игра</button>
+        <p style="margin-top:10px;font-size:13px;color:#777">Несколько незавершённых сессий — выберите ниже в «Мои сессии».</p>`;
+    }
+  } catch(e) { block.innerHTML = `<span style="color:#c0392b">${esc(e.message)}</span>`; }
+}
+
+async function loadMySessions() {
+  const tbody = document.getElementById('my-sessions-list');
+  try {
+    const sessions = await API.getMySessions();
+    if (!sessions.length) { tbody.innerHTML = '<tr><td colspan="5" class="empty">Нет сессий</td></tr>'; return; }
+    tbody.innerHTML = sessions.map(s => `
+      <tr>
+        <td>${s.status === 'in_progress'
+          ? '<span class="badge badge-active">В процессе</span>'
+          : '<span class="badge badge-done">Завершена</span>'}</td>
+        <td>${s.current_day}</td>
+        <td>${s.revenue.toLocaleString('ru-RU')} ₽</td>
+        <td>${fmtDate(s.start_date)}</td>
+        <td>${s.status === 'in_progress'
+          ? `<button class="btn btn-orange btn-sm" onclick="window.location.href='game.html?sid=${s.id}'">Продолжить</button>`
+          : ''}</td>
+      </tr>
+    `).join('');
+  } catch(e) { tbody.innerHTML = `<tr><td colspan="5" style="color:#c0392b">${esc(e.message)}</td></tr>`; }
+}
+
+async function loadLeaderboard() {
+  const tbody = document.getElementById('leaderboard-body');
+  try {
+    const rows = await API.leaderboard();
+    if (!rows.length) { tbody.innerHTML = '<tr><td colspan="4" class="empty">Нет завершённых игр</td></tr>'; return; }
+    tbody.innerHTML = rows.map((r, i) => `
+      <tr class="${r.user_login === currentUser.login ? 'my-row' : ''}">
+        <td>${i + 1}</td>
+        <td>${esc(r.user_login)}${r.user_login === currentUser.login ? ' <span style="color:#e67e22">◀</span>' : ''}</td>
+        <td>${r.revenue.toLocaleString('ru-RU')} ₽</td>
+        <td>${fmtDate(r.completed_at)}</td>
+      </tr>
+    `).join('');
+  } catch(e) { showErr('leaderboard-body', e); }
+}
+
+// ================================================ UTILS ================================================
+async function doLogout() {
+  try { await API.logout(); } catch {}
+  clearAuth();
+  window.location.href = 'login.html';
+}
+
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+function fmtDate(str) {
+  if (!str) return '—';
+  const d = new Date(str);
+  return d.toLocaleDateString('ru-RU', { day:'2-digit', month:'2-digit', year:'numeric' });
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showErr(tbodyId, e) {
+  const el = document.getElementById(tbodyId);
+  if (el) el.innerHTML = `<tr><td colspan="10" style="color:#c0392b;padding:12px">${esc(e.message)}</td></tr>`;
+}
+
+init();
+</script>
+</body>
+</html>
