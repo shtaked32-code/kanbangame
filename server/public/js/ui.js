@@ -55,12 +55,18 @@ async function confirmExit() {
 function hideGameOver() { document.getElementById('game-over').style.display = 'none'; }
 function showGameOver() {
   const deployed = [...G.deployed, ...G.expDeployed].map(sid => G.stories[sid]);
-  document.getElementById('go-score').textContent = `${G.revenue.toLocaleString('ru-RU')} ₽`;
+  const byType = t => deployed.filter(s => s.type === t).length;
+  const fmt = n => n.toLocaleString('ru-RU');
+
+  document.getElementById('go-score').textContent = `${fmt(G.revenue)} ₽`;
   document.getElementById('go-table').innerHTML = `
-    <tr><td>Историй выпущено</td><td>${deployed.length}</td></tr>
-    <tr><td>Стандартных историй</td><td>${deployed.filter(s=>s.type==='s').length}</td></tr>
     <tr><td>Сыграно дней</td><td>35</td></tr>
-    <tr><td>Итоговая выручка</td><td>${G.revenue.toLocaleString('ru-RU')} ₽</td></tr>
+    <tr><td>Всего выпущено</td><td>${deployed.length}</td></tr>
+    <tr><td><span class="badge badge-s">S</span> Стандартных</td><td>${byType('s')}</td></tr>
+    <tr><td><span class="badge badge-f">F</span> Фиксированная дата</td><td>${byType('f')}</td></tr>
+    <tr><td><span class="badge badge-i">I</span> Нематериальных</td><td>${byType('i')}</td></tr>
+    <tr><td><span class="badge badge-e">E</span> Срочных</td><td>${byType('e')}</td></tr>
+    <tr><td>Итоговая выручка</td><td>${fmt(G.revenue)} ₽</td></tr>
   `;
   document.getElementById('game-over').style.display = 'flex';
 }
@@ -91,60 +97,109 @@ function renderChart(type) {
 function renderCFD(ctx, canvas) {
   const data = G.cfdHistory;
   if (!data.length) { ctx.fillStyle='#333'; ctx.font='12px Arial'; ctx.fillText('Данных пока нет', 10, 30); return; }
-  const W = canvas.width - 70, H = canvas.height - 50, OX = 55, OY = 15;
 
-  const layers     = ['deployed','test','dev','analysis','ready'];
-  const fillColors = ['rgba(40,70,40,0.9)','rgba(92,184,92,0.55)','rgba(66,139,202,0.55)','rgba(217,83,79,0.55)','rgba(190,190,190,0.55)'];
-  const lineColors = ['#1e3e1e','#5cb85c','#428bca','#d9534f','#999'];
+  const OX = 55, OY = 15;
+  const W = canvas.width - OX - 20;
+  const H = canvas.height - OY - 48; // 48px снизу: метки X + подпись оси
 
-  const cumTop = (d, li) => layers.slice(0, li+1).reduce((s,k) => s+d[k], 0);
-  const maxVal = Math.max(...data.map(d => cumTop(d, layers.length-1)), 1);
-  const step   = maxVal <= 20 ? 5 : maxVal <= 40 ? 5 : 10;
+  // 6 слоёв снизу вверх; analysis и dev — суммируют подзоны
+  const layers = ['deployed','test','dev','analysis','ready','backlog'];
+  const fillColors = [
+    'rgba(39,174,96,0.85)',   // deployed
+    'rgba(46,204,113,0.50)',  // test
+    'rgba(52,152,219,0.65)',  // dev
+    'rgba(231,76,60,0.60)',   // analysis
+    'rgba(189,195,199,0.70)', // ready
+    'rgba(220,220,220,0.50)', // backlog
+  ];
+  const lineColors = ['#27ae60','#2ecc71','#3498db','#e74c3c','#95a5a6','#bbb'];
+
+  // Объединяем подзоны и обеспечиваем обратную совместимость
+  const nd = data.map(d => ({
+    ...d,
+    dev:      (d.dev      || 0) + (d.devDone      || 0),
+    analysis: (d.analysis || 0) + (d.analysisDone || 0),
+  }));
+
+  const cumTop = (d, li) => layers.slice(0, li+1).reduce((s,k) => s + (d[k] || 0), 0);
+  const maxVal = Math.max(...nd.map(d => cumTop(d, layers.length-1)), 1);
+  const step   = maxVal <= 20 ? 5 : maxVal <= 60 ? 10 : 15;
   const gridMax = Math.ceil(maxVal / step) * step || step;
 
-  const xFor = i => OX + (i / Math.max(data.length-1, 1)) * W;
+  const xFor = i => OX + (i / Math.max(nd.length-1, 1)) * W;
   const yFor = v => OY + H - (v / gridMax) * H;
 
-  ctx.strokeStyle = '#ddd'; ctx.lineWidth = 0.5; ctx.font = '11px Arial'; ctx.textAlign = 'right';
-  for (let g = 0; g <= gridMax; g += step) {
+  // Подпись оси Y (повёрнуто)
+  ctx.save();
+  ctx.translate(11, OY + H/2);
+  ctx.rotate(-Math.PI/2);
+  ctx.fillStyle='#999'; ctx.font='11px Arial'; ctx.textAlign='center';
+  ctx.fillText('Историй', 0, 0);
+  ctx.restore();
+
+  // Сетка и метки Y
+  ctx.lineWidth=0.5; ctx.font='11px Arial'; ctx.textAlign='right';
+  for (let g=0; g<=gridMax; g+=step) {
     const yy = yFor(g);
+    ctx.strokeStyle='#e8e8e8';
     ctx.beginPath(); ctx.moveTo(OX, yy); ctx.lineTo(OX+W, yy); ctx.stroke();
-    ctx.fillStyle = '#666'; ctx.fillText(g, OX-5, yy+4);
+    ctx.fillStyle='#999'; ctx.fillText(g, OX-5, yy+4);
   }
-  ctx.textAlign = 'center';
-  data.forEach((d,i) => {
-    if (i===0 || d.day % 5 === 0 || i===data.length-1) {
+
+  // Метки и вертикальные линии X
+  ctx.textAlign='center';
+  nd.forEach((d,i) => {
+    if (i===0 || d.day%5===0 || i===nd.length-1) {
       const xx = xFor(i);
-      ctx.strokeStyle='#ddd'; ctx.beginPath(); ctx.moveTo(xx, OY); ctx.lineTo(xx, OY+H); ctx.stroke();
-      ctx.fillStyle='#666'; ctx.fillText(d.day, xx, OY+H+14);
+      ctx.strokeStyle='#e8e8e8';
+      ctx.beginPath(); ctx.moveTo(xx, OY); ctx.lineTo(xx, OY+H); ctx.stroke();
+      ctx.fillStyle='#999'; ctx.font='11px Arial'; ctx.fillText(d.day, xx, OY+H+14);
     }
   });
 
-  for (let li = layers.length-1; li >= 0; li--) {
+  // Подпись оси X
+  ctx.fillStyle='#999'; ctx.font='11px Arial'; ctx.textAlign='center';
+  ctx.fillText('День', OX+W/2, OY+H+30);
+
+  // Закрашенные зоны (без точек)
+  for (let li=layers.length-1; li>=0; li--) {
     ctx.beginPath();
-    data.forEach((d,i) => { const x=xFor(i), y=yFor(cumTop(d,li)); i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
-    for (let i=data.length-1; i>=0; i--) ctx.lineTo(xFor(i), yFor(li>0?cumTop(data[i],li-1):0));
-    ctx.closePath(); ctx.fillStyle = fillColors[li]; ctx.fill();
-    ctx.beginPath();
-    data.forEach((d,i) => { const x=xFor(i),y=yFor(cumTop(d,li)); i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
-    ctx.strokeStyle=lineColors[li]; ctx.lineWidth=1.5; ctx.stroke();
-    data.forEach((d,i) => {
+    nd.forEach((d,i) => {
       const x=xFor(i), y=yFor(cumTop(d,li));
-      ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2);
-      ctx.fillStyle='white'; ctx.fill();
-      ctx.strokeStyle=lineColors[li]; ctx.lineWidth=1.5; ctx.stroke();
+      i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
     });
+    for (let i=nd.length-1; i>=0; i--)
+      ctx.lineTo(xFor(i), yFor(li>0 ? cumTop(nd[i],li-1) : 0));
+    ctx.closePath();
+    ctx.fillStyle=fillColors[li]; ctx.fill();
+
+    ctx.beginPath();
+    nd.forEach((d,i) => {
+      const x=xFor(i), y=yFor(cumTop(d,li));
+      i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    });
+    ctx.strokeStyle=lineColors[li]; ctx.lineWidth=1.2; ctx.stroke();
   }
 
-  ctx.strokeStyle='#888'; ctx.lineWidth=1;
+  // Оси
+  ctx.strokeStyle='#bbb'; ctx.lineWidth=1;
   ctx.beginPath(); ctx.moveTo(OX,OY); ctx.lineTo(OX,OY+H); ctx.lineTo(OX+W,OY+H); ctx.stroke();
 
-  ctx.textAlign='left';
-  [['Готово к работе',4],['Анализ',3],['Разработка',2],['Тест',1],['Выпущено',0]].forEach(([label,li],row) => {
-    const lx=OX+8, ly=OY+6+row*17;
-    ctx.fillStyle=fillColors[li]; ctx.fillRect(lx,ly,13,11);
-    ctx.strokeStyle=lineColors[li]; ctx.lineWidth=1; ctx.strokeRect(lx,ly,13,11);
-    ctx.fillStyle='#333'; ctx.font='11px Arial'; ctx.fillText(label, lx+17, ly+9);
+  // Легенда слева (сверху вниз, порядок как на диаграмме: бэклог → выпущено)
+  const legendItems = [
+    ['Бэклог',          5],
+    ['Готово к работе', 4],
+    ['Анализ',          3],
+    ['Разработка',      2],
+    ['Тест',            1],
+    ['Выпущено',        0],
+  ];
+  legendItems.forEach(([label, li], idx) => {
+    const lx = OX + 8, ly = OY + 8 + idx * 18;
+    ctx.fillStyle=fillColors[li]; ctx.fillRect(lx, ly, 12, 11);
+    ctx.strokeStyle=lineColors[li]; ctx.lineWidth=1; ctx.strokeRect(lx, ly, 12, 11);
+    ctx.fillStyle='#444'; ctx.font='11px Arial'; ctx.textAlign='left';
+    ctx.fillText(label, lx+15, ly+9);
   });
 }
 

@@ -177,7 +177,8 @@ function startWork() {
   const workerEmoji = { analyst:'🔴', developer:'🔵', tester:'🟢' };
 
   window._newlyFilledBlocks = {};
-  const pendingAdvances = [];
+  // {sid, advanceAt} — каждая карточка двигается сразу после заполнения своих блоков
+  const advanceSchedule = [];
   let cumulativeDelay = 0;
 
   const laneOrder = [
@@ -223,7 +224,8 @@ function startWork() {
                   window._newlyFilledBlocks[story.id][barIdx].push({ start: prevDone, count: overflowFilled, baseDelay: cumulativeDelay });
                   cumulativeDelay += (overflowFilled - 1) * 620 + 560 + 80;
                 }
-                if (story.wr[barIdx] === 0 && !pendingAdvances.includes(sid)) pendingAdvances.push(sid);
+                if (story.wr[barIdx] === 0 && !advanceSchedule.find(a => a.sid === sid))
+                  advanceSchedule.push({ sid, advanceAt: cumulativeDelay });
               }
             }
           }
@@ -261,7 +263,8 @@ function startWork() {
           window._newlyFilledBlocks[story.id][bar].push({ start: prevDone, count: filled, baseDelay: cumulativeDelay });
           cumulativeDelay += (filled - 1) * 620 + 560 + 80;
         }
-        if (story.wr[bar] === 0 && !pendingAdvances.includes(sid)) pendingAdvances.push(sid);
+        if (story.wr[bar] === 0 && !advanceSchedule.find(a => a.sid === sid))
+          advanceSchedule.push({ sid, advanceAt: cumulativeDelay });
       });
     });
   });
@@ -271,11 +274,69 @@ function startWork() {
     G.stories[sid].age = (G.stories[sid].age || 0) + 1;
   });
 
-  const fillDuration = cumulativeDelay + 200;
+  const lastAdvanceAt = advanceSchedule.length ? Math.max(...advanceSchedule.map(a => a.advanceAt)) : 0;
+  const fillDuration = Math.max(cumulativeDelay, lastAdvanceAt + 680) + 200;
   recordChartData();
   showWorkLog(log);
   render();
 
+  // Маппинг laneKey → id DOM-элемента для целевых колонок
+  const LANE_EL = {
+    analysisDone:'lane-analysis-done', devDone:'lane-dev-done', deployed:'lane-deployed',
+    expAnalysisDone:'exp-analysis-done', expDevDone:'exp-dev-done', expDeployed:'exp-deployed',
+  };
+
+  // Каждая карточка двигается сразу как её блоки заполнились
+  advanceSchedule.forEach(({ sid, advanceAt }) => {
+    setTimeout(() => {
+      const cardEl = document.querySelector('[data-sid="' + sid + '"]');
+      const fromRect = cardEl?.getBoundingClientRect();
+      if (!fromRect) { advanceStory(sid, []); return; }
+
+      advanceStory(sid, []);
+      renderHeader();
+
+      const story = G.stories[sid];
+      const targetEl = document.getElementById(LANE_EL[story.lane] || '');
+
+      // Клон летит из старой позиции в новую; снимаем blk-new-* чтобы блоки не мигали
+      if (window._newlyFilledBlocks) delete window._newlyFilledBlocks[sid];
+      const clone = cardEl.cloneNode(true);
+      clone.removeAttribute('draggable');
+      clone.querySelectorAll('.blk-new-a,.blk-new-d,.blk-new-t,.blk-new-blocker').forEach(el => {
+        el.classList.remove('blk-new-a','blk-new-d','blk-new-t','blk-new-blocker');
+        el.style.removeProperty('animation-delay');
+      });
+      clone.style.cssText =
+        'position:fixed;left:' + fromRect.left + 'px;top:' + fromRect.top + 'px;' +
+        'width:' + fromRect.width + 'px;z-index:9999;pointer-events:none;' +
+        'box-shadow:4px 8px 24px rgba(0,0,0,0.38);' +
+        'transition:left 0.52s cubic-bezier(.4,0,.2,1),top 0.52s cubic-bezier(.4,0,.2,1);';
+      document.body.appendChild(clone);
+      cardEl.style.visibility = 'hidden';
+
+      if (targetEl) {
+        // Очищаем анимационные данные — блоки должны выглядеть уже заполненными
+        if (window._newlyFilledBlocks) delete window._newlyFilledBlocks[sid];
+        const wrapper = document.createElement('div');
+        wrapper.className = 'card-slot';
+        wrapper.innerHTML = '<div class="card card-' + story.type + '" data-sid="' + sid + '">' + cardHTML(story, false) + '</div>';
+        wrapper.style.visibility = 'hidden';
+        targetEl.appendChild(wrapper);
+
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          const toRect = wrapper.getBoundingClientRect();
+          clone.style.left = toRect.left + 'px';
+          clone.style.top  = toRect.top  + 'px';
+        }));
+        setTimeout(() => { clone.remove(); wrapper.style.visibility = ''; }, 580);
+      } else {
+        setTimeout(() => clone.remove(), 580);
+      }
+    }, advanceAt);
+  });
+
+  // По окончании всех анимаций: снять сотрудников, пересчитать выручку, анимировать возврат
   setTimeout(() => {
     window._newlyFilledBlocks = {};
 
@@ -285,16 +346,8 @@ function startWork() {
       if (badge) workerSources[w.id] = { rect: badge.getBoundingClientRect(), type: w.type };
     });
 
-    const fromRects = {};
-    pendingAdvances.forEach(sid => {
-      const el = document.querySelector('[data-sid="' + sid + '"]');
-      if (el) fromRects[sid] = el.getBoundingClientRect();
-    });
-
     Object.values(G.stories).forEach(s => { s.assignedWorkers = []; });
     G.workers.forEach(w => { w.assigned = null; });
-
-    pendingAdvances.forEach(sid => advanceStory(sid, []));
 
     G.dailyRev = G.deployed.concat(G.expDeployed)
       .filter(sid => G.stories[sid].type === 's')
@@ -326,28 +379,6 @@ function startWork() {
         clone.style.top  = toRect.top  + 'px';
       }));
       setTimeout(() => clone.remove(), 580);
-    });
-
-    pendingAdvances.forEach(sid => {
-      const fromRect = fromRects[sid];
-      if (!fromRect) return;
-      const toEl = document.querySelector('[data-sid="' + sid + '"]');
-      if (!toEl) return;
-      const toRect = toEl.getBoundingClientRect();
-      const clone = toEl.cloneNode(true);
-      clone.removeAttribute('draggable');
-      clone.style.cssText =
-        'position:fixed;left:' + fromRect.left + 'px;top:' + fromRect.top + 'px;' +
-        'width:' + fromRect.width + 'px;z-index:9999;pointer-events:none;' +
-        'box-shadow:4px 8px 24px rgba(0,0,0,0.38);' +
-        'transition:left 0.52s cubic-bezier(.4,0,.2,1),top 0.52s cubic-bezier(.4,0,.2,1);';
-      document.body.appendChild(clone);
-      toEl.style.visibility = 'hidden';
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        clone.style.left = toRect.left + 'px';
-        clone.style.top  = toRect.top  + 'px';
-      }));
-      setTimeout(() => { clone.remove(); toEl.style.visibility = ''; }, 580);
     });
 
     setTimeout(advanceDay, 1000);
@@ -532,9 +563,14 @@ function applyDayEffects(effects) {
         break;
       }
       case 'blocker': {
-        const laneKey = eff.lane === 'test' ? 'test' : 'development';
-        const expLane = eff.lane === 'test' ? 'expTest' : 'expDevelopment';
-        const sid = G[laneKey][0] || G[expLane]?.[0];
+        // Каскад поиска: если целевой столбец пуст — ищем в соседних вверх по потоку
+        const searchLanes = eff.lane === 'test'
+          ? ['test','expTest','devDone','expDevDone','development','expDevelopment']
+          : ['development','expDevelopment','analysisDone','expAnalysisDone','analysis','expAnalysis'];
+        let sid = null;
+        for (const lane of searchLanes) {
+          if (G[lane]?.length) { sid = G[lane][0]; break; }
+        }
         if (sid) {
           const total = 5 + Math.floor(Math.random() * 3);
           G.stories[sid].blocker = true;
@@ -570,13 +606,15 @@ function applyDayEffects(effects) {
 function recordChartData() {
   const d = G.day;
   G.cfdHistory.push({
-    day: d,
-    backlog:  G.backlog.length,
-    ready:    G.ready.length,
-    analysis: G.analysis.length + G.analysisDone.length,
-    dev:      G.development.length + G.devDone.length,
-    test:     G.test.length,
-    deployed: G.deployed.length + G.expDeployed.length,
+    day:          d,
+    backlog:      G.backlog.length,
+    ready:        G.ready.length,
+    analysis:     G.analysis.length,
+    analysisDone: G.analysisDone.length,
+    dev:          G.development.length,
+    devDone:      G.devDone.length,
+    test:         G.test.length,
+    deployed:     G.deployed.length + G.expDeployed.length,
   });
   G.revHistory.push({ day: d, cumRev: G.revenue, dailyRev: G.dailyRev });
 }

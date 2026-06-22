@@ -212,14 +212,21 @@ const DAY_EVENTS = {
   },
 };
 
-// Valid forward moves: fromLane → toLane
+// Допустимые перемещения: fromLane → [toLane, ...]
+// Назад: analysis→ready, analysisDone↔analysis, development→analysisDone, devDone↔development, test→devDone
 const VALID_MOVES = {
-  'backlog':        'ready',
-  'ready':          'analysis',
-  'analysisDone':   'development',
-  'devDone':        'test',
-  'expBacklog':     'expReady',
-  'expReady':       'expAnalysis',
-  'expAnalysisDone':'expDevelopment',
-  'expDevDone':     'expTest',
+  'backlog':         ['ready'],
+  'ready':           ['analysis', 'backlog'],
+  'analysis':        ['ready'],
+  'analysisDone':    ['development'],
+  'development':     ['analysisDone'],
+  'devDone':         ['test'],
+  'test':            ['devDone'],
+  'expBacklog':      ['expReady'],
+  'expReady':        ['expAnalysis'],
+  'expAnalysis':     ['expReady'],
+  'expAnalysisDone': ['expDevelopment'],
+  'expDevelopment':  ['expAnalysisDone'],
+  'expDevDone':      ['expTest'],
+  'expTest':         ['expDevDone'],
 };

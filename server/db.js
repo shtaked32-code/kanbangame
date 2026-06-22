@@ -48,6 +48,13 @@ function initDb() {
   // Seed test data
   const participantCount = db.prepare("SELECT COUNT(*) AS c FROM users WHERE role = 'участник'").get().c;
   if (participantCount === 0) seedTestData();
+
+  // Seed admin sessions
+  const adminRow = db.prepare("SELECT id FROM users WHERE login = 'admin'").get();
+  if (adminRow) {
+    const adminSessions = db.prepare('SELECT COUNT(*) AS c FROM game_sessions WHERE user_id = ?').get(adminRow.id).c;
+    if (adminSessions === 0) seedAdminSessions(adminRow.id);
+  }
 }
 
 // ===================================================
@@ -93,8 +100,10 @@ function seedTestData() {
 // ===================================================
 //  MID-GAME STATE — реалистичное состояние на день 15
 // ===================================================
-function buildMidGameState() {
-  const STORIES_DEF = [
+// ===================================================
+//  ОБЩИЕ ДАННЫЕ ОБ ИСТОРИЯХ (совпадают с client data.js)
+// ===================================================
+const STORIES_DEF = [
     {id:'S1',  type:'s', val:7700,  w:[8,8,6]},
     {id:'S2',  type:'s', val:8400,  w:[10,9,6]},
     {id:'S3',  type:'s', val:7700,  w:[9,9,7]},
@@ -158,9 +167,10 @@ function buildMidGameState() {
     {id:'E1',  type:'e', val:140000,  dueDay:18, appearDay:15, w:[3,4,2]},
     {id:'E2',  type:'e', val:-175000, dueDay:25, appearDay:20, w:[4,5,3]},
     {id:'E3',  type:'e', val:-70000,  dueDay:30, appearDay:28, w:[3,4,3]},
-    {id:'E4',  type:'e', val:210000,  dueDay:35, appearDay:32, w:[5,6,4]},
-  ];
+  {id:'E4',  type:'e', val:210000,  dueDay:35, appearDay:32, w:[5,6,4]},
+];
 
+function buildMidGameState() {
   const stories = {};
   STORIES_DEF.forEach(def => {
     stories[def.id] = {
@@ -255,12 +265,18 @@ function buildMidGameState() {
     stories,
 
     cfdHistory: [
-      { day:9,  backlog:45, ready:5, analysis:3, dev:4, test:3, deployed:0 },
-      { day:10, backlog:45, ready:5, analysis:3, dev:3, test:2, deployed:3 },
-      { day:11, backlog:45, ready:5, analysis:3, dev:3, test:1, deployed:5 },
-      { day:12, backlog:45, ready:4, analysis:3, dev:3, test:1, deployed:5 },
-      { day:13, backlog:45, ready:4, analysis:3, dev:2, test:1, deployed:6 },
-      { day:14, backlog:45, ready:3, analysis:3, dev:2, test:1, deployed:6 },
+      // Начальная расстановка: test:S1-S3, devDone:S4-S5, dev:S6-S7, analysisDone:S8, analysis:S9-S10, ready:S11-S13,F1,I1
+      { day:9,  backlog:45, ready:5, analysis:2, analysisDone:1, dev:2, devDone:2, test:3, deployed:0 },
+      // S1,S2,S3 деплой; S4,S5 → test
+      { day:10, backlog:45, ready:5, analysis:2, analysisDone:1, dev:2, devDone:0, test:2, deployed:3 },
+      // S4,S5 деплой; S6 → devDone
+      { day:11, backlog:45, ready:5, analysis:2, analysisDone:0, dev:2, devDone:1, test:0, deployed:5 },
+      // S6 деплой; S8 → dev; S7 → test
+      { day:12, backlog:45, ready:4, analysis:2, analysisDone:0, dev:2, devDone:0, test:1, deployed:6 },
+      // S9,S10 → analysisDone/dev; прогресс
+      { day:13, backlog:45, ready:3, analysis:2, analysisDone:1, dev:2, devDone:0, test:1, deployed:6 },
+      // Без изменений структуры (прогресс работы)
+      { day:14, backlog:45, ready:3, analysis:2, analysisDone:1, dev:2, devDone:0, test:1, deployed:6 },
     ],
     ctHistory: [
       { id:'S1', days:9,  deployedDay:9  },
@@ -281,6 +297,210 @@ function buildMidGameState() {
     log: [],
     _wip: { ready:5, analysis:3, development:5, test:3, expedite:1 },
   };
+}
+
+// ===================================================
+//  СОСТОЯНИЕ ДЛЯ ДЕНЬ 34 (один день до конца игры)
+// ===================================================
+function makeStoryObj(def) {
+  return {
+    id: def.id, type: def.type,
+    ...(def.val      !== undefined ? { val: def.val }           : {}),
+    ...(def.name                   ? { name: def.name }         : {}),
+    ...(def.buff                   ? { buff: def.buff }         : {}),
+    ...(def.dueDay   !== undefined ? { dueDay: def.dueDay }     : {}),
+    ...(def.appearDay !== undefined ? { appearDay: def.appearDay } : {}),
+    w: [...def.w], wr: [...def.w],
+    age: 0, enteredDay: null, deployedDay: null,
+    assignedWorkers: [],
+    lane: def.type === 'e' ? 'hidden' : 'backlog',
+    expedite: def.type === 'e',
+    blocker: false, blockerRemaining: 0, blockerTotal: 0,
+  };
+}
+
+function buildDay34State(options) {
+  const {
+    deployedIds = [], testIds = [], devDoneIds = [], developmentIds = [],
+    analysisDoneIds = [], analysisIds = [], readyIds = [],
+    expDeployedIds = [], expTestIds = [], expBacklogIds = [],
+    removedIds = [],
+    revenue, buffs = { analyst:0, developer:0, tester:0 },
+    blockerStoryId = null,
+  } = options;
+
+  const stories = {};
+  STORIES_DEF.forEach(def => { stories[def.id] = makeStoryObj(def); });
+  const get = id => STORIES_DEF.find(d => d.id === id);
+  function set(id, props) { if (stories[id]) Object.assign(stories[id], props); }
+
+  // Деплой: равномерно распределяем по дням 9-33
+  deployedIds.forEach((id, i) => {
+    const d = 9 + Math.floor(i * 24 / Math.max(deployedIds.length - 1, 1));
+    set(id, { wr:[0,0,0], lane:'deployed', enteredDay:Math.max(1, d-4), deployedDay:Math.min(d,33), age:0 });
+  });
+
+  testIds.forEach(id => {
+    const w = get(id)?.w || [6,7,5];
+    set(id, { wr:[0,0,Math.ceil(w[2]*0.4)], lane:'test', enteredDay:30, age:3 });
+  });
+  devDoneIds.forEach(id => {
+    const w = get(id)?.w || [6,7,5];
+    set(id, { wr:[0,0,w[2]], lane:'devDone', enteredDay:28, age:5 });
+  });
+  developmentIds.forEach(id => {
+    const w = get(id)?.w || [6,7,5];
+    set(id, { wr:[0,Math.ceil(w[1]*0.55),w[2]], lane:'development', enteredDay:26, age:7 });
+  });
+  analysisDoneIds.forEach(id => {
+    const w = get(id)?.w || [6,7,5];
+    set(id, { wr:[0,w[1],w[2]], lane:'analysisDone', enteredDay:25, age:8 });
+  });
+  analysisIds.forEach(id => {
+    const w = get(id)?.w || [6,7,5];
+    set(id, { wr:[Math.ceil(w[0]*0.45),w[1],w[2]], lane:'analysis', enteredDay:27, age:6 });
+  });
+  readyIds.forEach(id => {
+    const w = get(id)?.w || [6,7,5];
+    set(id, { wr:[...w], lane:'ready', enteredDay:31, age:2 });
+  });
+  expDeployedIds.forEach(id => {
+    set(id, { wr:[0,0,0], lane:'expDeployed', enteredDay:32, deployedDay:33, age:0 });
+  });
+  expTestIds.forEach(id => {
+    const w = get(id)?.w || [3,4,2];
+    set(id, { wr:[0,0,Math.ceil(w[2]*0.4)], lane:'expTest', enteredDay:32, age:2 });
+  });
+  expBacklogIds.forEach(id => set(id, { lane:'expBacklog' }));
+  removedIds.forEach(id => set(id, { lane:'removed' }));
+
+  if (blockerStoryId && stories[blockerStoryId]) {
+    Object.assign(stories[blockerStoryId], { blocker:true, blockerRemaining:4, blockerTotal:6 });
+  }
+
+  const placed = new Set([...deployedIds,...testIds,...devDoneIds,...developmentIds,
+    ...analysisDoneIds,...analysisIds,...readyIds,...removedIds,
+    ...expDeployedIds,...expTestIds,...expBacklogIds]);
+  const backlog = STORIES_DEF.filter(d => d.type !== 'e' && !placed.has(d.id)).map(d => d.id);
+
+  // cfdHistory: нарастающая кривая от дня 9 до 33
+  const cfdHistory = [];
+  for (let day = 9; day <= 34; day++) {
+    const prog = Math.pow((day - 9) / 25, 0.75);
+    const dep  = Math.round(deployedIds.length * prog);
+    const pip  = Math.max(0, 15 - dep + 5);
+    cfdHistory.push({
+      day, deployed: dep,
+      test: Math.max(0, Math.floor(pip * 0.2)),
+      devDone: Math.max(0, Math.floor(pip * 0.1)),
+      dev: Math.max(0, Math.floor(pip * 0.25)),
+      analysisDone: Math.max(0, Math.floor(pip * 0.1)),
+      analysis: Math.max(0, Math.floor(pip * 0.25)),
+      ready: Math.min(3, Math.max(1, Math.floor(pip * 0.1))),
+      backlog: Math.max(0, 45 - dep - pip),
+    });
+  }
+
+  // revHistory: нарастающая выручка
+  const revHistory = [];
+  for (let day = 9; day <= 34; day++) {
+    const prog = Math.pow((day - 9) / 25, 1.6);
+    const cumRev = Math.round(revenue * prog);
+    const prevRev = day > 9 ? Math.round(revenue * Math.pow((day - 10) / 25, 1.6)) : 0;
+    revHistory.push({ day, cumRev, dailyRev: Math.max(0, cumRev - prevRev) });
+  }
+
+  const ctHistory = deployedIds.map(id => {
+    const s = stories[id];
+    return { id, days: Math.max(1, (s.deployedDay||9) - (s.enteredDay||1) + 1), deployedDay: s.deployedDay||9 };
+  });
+
+  // Состав команды после всех событий до конца дня 33:
+  // a1 ушёл день 32; d1 ушёл день 26; t1 вернулся день 29; lockdown вкл день 33; WIP.ready=3 с дня 17
+  return {
+    day: 34, revenue, dailyRev: 0,
+    buffs, workDone: false, carlosPolicy: false, lockdown: true, warnShown: false,
+    backlog,
+    ready: readyIds, analysis: analysisIds, analysisDone: analysisDoneIds,
+    development: developmentIds, devDone: devDoneIds, test: testIds,
+    deployed: deployedIds,
+    expBacklog: expBacklogIds, expReady: [], expAnalysis: [], expAnalysisDone: [],
+    expDevelopment: [], expDevDone: [], expTest: expTestIds, expDeployed: expDeployedIds,
+    workers: [
+      { id:'a1', type:'analyst',   active:false, assigned:null },
+      { id:'a2', type:'analyst',   active:true,  assigned:null },
+      { id:'a3', type:'analyst',   active:false, assigned:null },
+      { id:'a4', type:'analyst',   active:false, assigned:null },
+      { id:'d1', type:'developer', active:false, assigned:null },
+      { id:'d2', type:'developer', active:true,  assigned:null },
+      { id:'d3', type:'developer', active:true,  assigned:null },
+      { id:'d4', type:'developer', active:false, assigned:null },
+      { id:'t1', type:'tester',    active:true,  assigned:null },
+      { id:'t2', type:'tester',    active:true,  assigned:null },
+      { id:'t3', type:'tester',    active:true,  assigned:null },
+      { id:'t4', type:'tester',    active:false, assigned:null },
+    ],
+    stories, cfdHistory, ctHistory, revHistory, log: [],
+    _wip: { ready:3, analysis:3, development:5, test:3, expedite:1 },
+  };
+}
+
+// ===================================================
+//  SEED — 3 СЕССИИ ДЛЯ ADMIN
+// ===================================================
+function seedAdminSessions(adminId) {
+  // Сессия 1: хороший игрок — 23 стандартных, F1+F3 бонусы, I1+I2 баффы, E1 вовремя, E4 в тестировании
+  const s1 = buildDay34State({
+    deployedIds: [
+      'S1','S2','S3','S4','S5','S6','S7','S8','S9','S10','S11','S12',
+      'S13','S14','S15','S16','S17','S18','S19','S20','S21','S22','S23',
+      'F1','F3','I1','I2','E1',
+    ],
+    testIds: ['S24','S25'], devDoneIds: ['S26'],
+    developmentIds: ['S27','S28'], analysisDoneIds: ['S29'],
+    analysisIds: ['S30','S31'], readyIds: ['S32'],
+    expTestIds: ['E4'],
+    removedIds: ['F2','E2','E3'],  // F2 просрочена(-35K), E2 просрочена(-175K), E3 просрочена(-70K)
+    revenue: 2_380_000,
+    buffs: { analyst:1, developer:1, tester:0 },
+  });
+
+  // Сессия 2: средний игрок — 16 стандартных, F1 вовремя, I1 бафф, E1 вовремя, E4 в бэклоге
+  const s2 = buildDay34State({
+    deployedIds: [
+      'S1','S2','S3','S4','S5','S6','S7','S8','S9',
+      'S10','S11','S12','S13','S14','S15','S16',
+      'F1','I1','E1',
+    ],
+    testIds: ['S17','S18'], devDoneIds: ['S19'],
+    developmentIds: ['S20','S21'], analysisDoneIds: ['S22'],
+    analysisIds: ['S23','S24'], readyIds: ['S25','S26'],
+    expBacklogIds: ['E4'],
+    removedIds: ['F2','E2','E3'],
+    revenue: 1_640_000,
+    buffs: { analyst:0, developer:1, tester:0 },
+  });
+
+  // Сессия 3: слабый игрок — 9 стандартных, F1 вовремя, блокер в тестировании, E4 в бэклоге
+  const s3 = buildDay34State({
+    deployedIds: ['S1','S2','S3','S4','S5','S6','S7','S8','S9','F1'],
+    testIds: ['S10'], devDoneIds: ['S11'],
+    developmentIds: ['S12','S13'], analysisDoneIds: ['S14'],
+    analysisIds: ['S15','S16'], readyIds: ['S17','S18','S19'],
+    expBacklogIds: ['E4'],
+    removedIds: ['F2','E2','E3'],
+    revenue: 980_000,
+    buffs: { analyst:0, developer:0, tester:0 },
+    blockerStoryId: 'S10',
+  });
+
+  [s1, s2, s3].forEach((state, i) => {
+    const startDate = new Date(Date.now() - (30 - i * 3) * 86400000).toISOString();
+    db.prepare(`
+      INSERT INTO game_sessions (user_id, user_login, status, start_date, current_day, revenue, game_state)
+      VALUES (?, 'admin', 'in_progress', ?, 34, ?, ?)
+    `).run(adminId, startDate, state.revenue, JSON.stringify(state));
+  });
 }
 
 module.exports = { db, initDb };

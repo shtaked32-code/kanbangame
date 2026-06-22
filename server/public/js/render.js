@@ -121,6 +121,17 @@ function renderExpedite() {
         : '';
       return;
     }
+    if (laneKey === 'expDeployed') {
+      if (!sids.length) { el.innerHTML = ''; return; }
+      const top = G.stories[sids[sids.length - 1]];
+      el.innerHTML = `<div class="bl-stack" style="margin:4px auto;cursor:default">
+        ${sids.length > 2 ? '<div class="bl-shadow" style="top:8px;left:8px"></div>' : ''}
+        ${sids.length > 1 ? '<div class="bl-shadow" style="top:4px;left:4px"></div>' : ''}
+        <div class="card card-${top.type} bl-top">${cardHTML(top, true)}</div>
+        ${sids.length > 1 ? `<div class="bl-stack-count">${sids.length} шт.</div>` : ''}
+      </div>`;
+      return;
+    }
     const isDone = laneKey === 'expAnalysisDone' || laneKey === 'expDevDone';
     el.innerHTML = sids.map(sid => {
       const story = G.stories[sid];

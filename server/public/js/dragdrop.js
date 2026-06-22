@@ -5,23 +5,22 @@ function dragStart(event, sid) {
   event.dataTransfer.setData('text/plain', sid);
   event.dataTransfer.effectAllowed = 'move';
   const story = G.stories[sid];
-  const validTarget = VALID_MOVES[story ? story.lane : ''];
+  window._dragValidTargets = VALID_MOVES[story ? story.lane : ''] || [];
   document.querySelectorAll('.lane').forEach(el => {
     el.addEventListener('dragenter', onDragEnter);
     el.addEventListener('dragleave', onDragLeave);
   });
-  window._dragValidTarget = validTarget;
 }
 
 function onDragEnter(e) {
-  const laneId = this.id;
   const idToLane = {
+    'lane-backlog':'backlog',
     'lane-ready':'ready', 'lane-analysis':'analysis', 'lane-analysis-done':'analysisDone',
     'lane-development':'development', 'lane-dev-done':'devDone', 'lane-test':'test',
     'exp-ready':'expReady', 'exp-analysis':'expAnalysis', 'exp-analysis-done':'expAnalysisDone',
     'exp-development':'expDevelopment', 'exp-dev-done':'expDevDone', 'exp-test':'expTest',
   };
-  if (idToLane[laneId] === window._dragValidTarget) this.classList.add('drop-target');
+  if ((window._dragValidTargets || []).includes(idToLane[this.id])) this.classList.add('drop-target');
 }
 
 function onDragLeave(e) { this.classList.remove('drop-target'); }
@@ -32,7 +31,7 @@ function dragEnd(event) {
     el.removeEventListener('dragenter', onDragEnter);
     el.removeEventListener('dragleave', onDragLeave);
   });
-  window._dragValidTarget = null;
+  window._dragValidTargets = [];
 }
 
 function workerDragOver(event) {
@@ -66,8 +65,26 @@ function dropCard(event, toLane) {
   const story = G.stories[data];
   if (!story) return;
   const from = story.lane;
-  if (VALID_MOVES[from] !== toLane) { toast('Недопустимое перемещение'); return; }
+  const allowed = VALID_MOVES[from] || [];
+  if (!allowed.includes(toLane)) { toast('Недопустимое перемещение'); return; }
   if (!canPullTo(toLane)) { toast('WIP-лимит достигнут!'); return; }
+
+  // Возврат в бэклог: сбрасываем мета-данные, прогресс не трогаем
+  if (toLane === 'backlog') {
+    story.enteredDay = null;
+    story.age = 0;
+    story.blocker = false;
+    story.blockerRemaining = 0;
+    story.blockerTotal = 0;
+    if (story.assignedWorkers?.length) {
+      story.assignedWorkers.forEach(wid => {
+        const w = G.workers.find(w => w.id === wid);
+        if (w) w.assigned = null;
+      });
+      story.assignedWorkers = [];
+    }
+  }
+
   moveTo(data, toLane);
   render();
   saveState();

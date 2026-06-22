@@ -127,6 +127,17 @@ app.get('/kanban_game/api/sessions/active', requireAuth, requireAdmin, (req, res
   res.json(sessions);
 });
 
+app.delete('/kanban_game/api/sessions/:id', requireAuth, (req, res) => {
+  const session = db.prepare('SELECT * FROM game_sessions WHERE id = ?').get(req.params.id);
+  if (!session) return res.status(404).json({ error: 'Сессия не найдена' });
+  if (session.user_id !== req.user.id && req.user.role !== 'admin')
+    return res.status(403).json({ error: 'Нет доступа' });
+  if (session.status === 'completed')
+    return res.status(400).json({ error: 'Нельзя удалить завершённую игру' });
+  db.prepare('DELETE FROM game_sessions WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
 app.get('/kanban_game/api/sessions/:id', requireAuth, (req, res) => {
   const session = db.prepare('SELECT * FROM game_sessions WHERE id = ?').get(req.params.id);
   if (!session) return res.status(404).json({ error: 'Сессия не найдена' });

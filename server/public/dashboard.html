@@ -92,11 +92,23 @@ tr.my-row td { background: #fff8e1; font-weight: 600; }
   <div class="tabs">
     <div class="tab active" onclick="adminTab('main')">Главная</div>
     <div class="tab" onclick="adminTab('users')">Пользователи</div>
-    <div class="tab" onclick="adminTab('game')">Игра</div>
   </div>
 
   <!-- Главная -->
   <div id="admin-main" class="tab-content active">
+    <div class="block">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div class="block-title" style="margin-bottom:0">Новая игра</div>
+        <button class="btn btn-green" onclick="startNewGame()">Играть</button>
+      </div>
+    </div>
+    <div class="block">
+      <div class="block-title">Топ завершённых игр</div>
+      <table>
+        <thead><tr><th>#</th><th>Пользователь</th><th>Выручка</th><th>Дата игры</th></tr></thead>
+        <tbody id="top-games-body"></tbody>
+      </table>
+    </div>
     <div class="block">
       <div class="block-title">Незавершённые сессии</div>
       <table>
@@ -105,10 +117,10 @@ tr.my-row td { background: #fff8e1; font-weight: 600; }
       </table>
     </div>
     <div class="block">
-      <div class="block-title">Топ завершённых игр</div>
+      <div class="block-title">Мои сессии</div>
       <table>
-        <thead><tr><th>#</th><th>Пользователь</th><th>Выручка</th><th>Дата игры</th></tr></thead>
-        <tbody id="top-games-body"></tbody>
+        <thead><tr><th>Статус</th><th>День</th><th>Выручка</th><th>Начата</th><th></th></tr></thead>
+        <tbody id="admin-my-sessions-body"></tbody>
       </table>
     </div>
   </div>
@@ -124,14 +136,6 @@ tr.my-row td { background: #fff8e1; font-weight: 600; }
         <thead><tr><th>Логин</th><th>Пароль</th><th>Роль</th><th>Последний вход</th><th>Макс. выручка</th><th></th></tr></thead>
         <tbody id="users-body"></tbody>
       </table>
-    </div>
-  </div>
-
-  <!-- Игра -->
-  <div id="admin-game" class="tab-content">
-    <div class="block">
-      <div class="block-title">Игра</div>
-      <div id="admin-game-block"></div>
     </div>
   </div>
 </div>
@@ -214,7 +218,7 @@ async function init() {
 // ================================================ ADMIN ================================================
 function adminTab(name) {
   document.querySelectorAll('.tab').forEach((el, i) => {
-    const names = ['main','users','game'];
+    const names = ['main','users'];
     el.classList.toggle('active', names[i] === name);
   });
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
@@ -222,39 +226,94 @@ function adminTab(name) {
 
   if (name === 'main')  loadAdminMain();
   if (name === 'users') loadAdminUsers();
-  if (name === 'game')  loadAdminGame();
 }
 
 async function loadAdminMain() {
   try {
-    const [rows, sessions] = await Promise.all([API.topGames(), API.getActiveSessions()]);
+    const [topRows, activeSessions, mySessions] = await Promise.all([
+      API.topGames(), API.getActiveSessions(), API.getMySessions(),
+    ]);
 
-    const atbody = document.getElementById('active-sessions-body');
-    if (!sessions.length) {
-      atbody.innerHTML = '<tr><td colspan="4" class="empty">Нет активных сессий</td></tr>';
+    // Топ завершённых
+    const topTbody = document.getElementById('top-games-body');
+    if (!topRows.length) {
+      topTbody.innerHTML = '<tr><td colspan="4" class="empty">Нет завершённых игр</td></tr>';
     } else {
-      atbody.innerHTML = sessions.map(s => `
+      topTbody.innerHTML = topRows.map((r, i) => `
+        <tr>
+          <td>${i + 1}</td>
+          <td>${esc(r.user_login)}</td>
+          <td>${r.revenue.toLocaleString('ru-RU')} ₽</td>
+          <td>${fmtDate(r.completed_at)}</td>
+        </tr>
+      `).join('');
+    }
+
+    // Незавершённые сессии всех пользователей, кроме текущего
+    const otherSessions = activeSessions.filter(s => s.user_login !== currentUser.login);
+    const atbody = document.getElementById('active-sessions-body');
+    if (!otherSessions.length) {
+      atbody.innerHTML = '<tr><td colspan="5" class="empty">Нет активных сессий</td></tr>';
+    } else {
+      atbody.innerHTML = otherSessions.map(s => `
         <tr>
           <td>${esc(s.user_login)}</td>
           <td>${fmtDate(s.start_date)}</td>
           <td>${s.current_day}</td>
           <td>${s.revenue.toLocaleString('ru-RU')} ₽</td>
-          <td>${s.user_login === currentUser.login ? `<button class="btn btn-orange btn-sm" onclick="window.location.href='game.html?sid=${s.id}'">Продолжить</button>` : ''}</td>
+          <td style="white-space:nowrap">
+            ${s.user_login === currentUser.login
+              ? `<button class="btn btn-orange btn-sm" onclick="window.location.href='game.html?sid=${s.id}'">Продолжить</button>`
+              : ''}
+            <button class="btn btn-red btn-sm" style="margin-left:4px" onclick="adminDeleteSession(${s.id})">Удалить</button>
+          </td>
         </tr>
       `).join('');
     }
 
-    const tbody = document.getElementById('top-games-body');
-    if (!rows.length) { tbody.innerHTML = '<tr><td colspan="4" class="empty">Нет завершённых игр</td></tr>'; return; }
-    tbody.innerHTML = rows.map((r, i) => `
-      <tr>
-        <td>${i + 1}</td>
-        <td>${esc(r.user_login)}</td>
-        <td>${r.revenue.toLocaleString('ru-RU')} ₽</td>
-        <td>${fmtDate(r.completed_at)}</td>
-      </tr>
-    `).join('');
-  } catch(e) { showErr('top-games-body', e); showErr('active-sessions-body', e); }
+    // Мои сессии (только завершённые, макс 5, по убыванию выручки)
+    const myTbody = document.getElementById('admin-my-sessions-body');
+    const completed = mySessions
+      .filter(s => s.status === 'completed')
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 5);
+    const inProgress = mySessions.filter(s => s.status === 'in_progress');
+    if (!completed.length && !inProgress.length) {
+      myTbody.innerHTML = '<tr><td colspan="5" class="empty">Нет сессий</td></tr>';
+    } else {
+      myTbody.innerHTML = [
+        ...inProgress.map(s => `
+          <tr>
+            <td><span class="badge badge-active">В процессе</span></td>
+            <td>${s.current_day}</td>
+            <td>${s.revenue.toLocaleString('ru-RU')} ₽</td>
+            <td>${fmtDate(s.start_date)}</td>
+            <td style="white-space:nowrap">
+              <button class="btn btn-orange btn-sm" onclick="window.location.href='game.html?sid=${s.id}'">Продолжить</button>
+              <button class="btn btn-red btn-sm" style="margin-left:4px" onclick="adminDeleteSession(${s.id})">Удалить</button>
+            </td>
+          </tr>
+        `),
+        ...completed.map(s => `
+          <tr>
+            <td><span class="badge badge-done">Завершена</span></td>
+            <td>${s.current_day}</td>
+            <td>${s.revenue.toLocaleString('ru-RU')} ₽</td>
+            <td>${fmtDate(s.completed_at)}</td>
+            <td></td>
+          </tr>
+        `),
+      ].join('');
+    }
+  } catch(e) { showErr('top-games-body', e); }
+}
+
+async function adminDeleteSession(id) {
+  if (!confirm('Удалить незавершённую игру?')) return;
+  try {
+    await API.deleteSession(id);
+    loadAdminMain();
+  } catch(e) { alert(e.message); }
 }
 
 async function loadAdminUsers() {
@@ -319,35 +378,6 @@ async function submitAddUser() {
 }
 
 
-async function loadAdminGame() {
-  const block = document.getElementById('admin-game-block');
-  try {
-    const sessions = await API.getMySessions();
-    const active = sessions.filter(s => s.status === 'in_progress');
-    if (active.length === 0) {
-      block.innerHTML = `<button class="btn btn-green" onclick="startNewGame()">Играть</button>`;
-    } else if (active.length === 1) {
-      block.innerHTML = `
-        <button class="btn btn-green" onclick="startNewGame()">Новая игра</button>
-        <button class="btn btn-orange" style="margin-left:10px" onclick="window.location.href='game.html?sid=${active[0].id}'">Продолжить (День ${active[0].current_day})</button>
-      `;
-    } else {
-      block.innerHTML = `
-        <button class="btn btn-green" onclick="startNewGame()" style="margin-bottom:14px">Новая игра</button>
-        <div style="font-size:13px;font-weight:600;color:#555;margin-bottom:8px">Выберите сессию:</div>
-        ${active.map(s => `
-          <div class="session-item">
-            <div class="session-meta">
-              <strong>День ${s.current_day} · ${s.revenue.toLocaleString('ru-RU')} ₽</strong>
-              Начата: ${fmtDate(s.start_date)}
-            </div>
-            <button class="btn btn-orange btn-sm" onclick="window.location.href='game.html?sid=${s.id}'">Продолжить</button>
-          </div>
-        `).join('')}
-      `;
-    }
-  } catch(e) { block.innerHTML = `<span style="color:#c0392b">${esc(e.message)}</span>`; }
-}
 
 // ================================================ PARTICIPANT ================================================
 async function loadUserView() {
@@ -386,12 +416,22 @@ async function loadMySessions() {
         <td>${s.current_day}</td>
         <td>${s.revenue.toLocaleString('ru-RU')} ₽</td>
         <td>${fmtDate(s.start_date)}</td>
-        <td>${s.status === 'in_progress'
-          ? `<button class="btn btn-orange btn-sm" onclick="window.location.href='game.html?sid=${s.id}'">Продолжить</button>`
+        <td style="white-space:nowrap">${s.status === 'in_progress'
+          ? `<button class="btn btn-orange btn-sm" onclick="window.location.href='game.html?sid=${s.id}'">Продолжить</button>
+             <button class="btn btn-red btn-sm" style="margin-left:6px" onclick="deleteSession(${s.id})">Удалить</button>`
           : ''}</td>
       </tr>
     `).join('');
   } catch(e) { tbody.innerHTML = `<tr><td colspan="5" style="color:#c0392b">${esc(e.message)}</td></tr>`; }
+}
+
+async function deleteSession(id) {
+  if (!confirm('Удалить незавершённую игру? Это действие нельзя отменить.')) return;
+  try {
+    await API.deleteSession(id);
+    loadMySessions();
+    loadUserGame();
+  } catch(e) { alert(e.message); }
 }
 
 async function loadLeaderboard() {

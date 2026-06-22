@@ -39,6 +39,7 @@ const API = {
   getActiveSessions: ()                  => apiRequest('GET',  '/sessions/active'),
   getSession:     (id)                   => apiRequest('GET',  `/sessions/${id}`),
   saveSession:    (id, data)             => apiRequest('PATCH', `/sessions/${id}`, data),
+  deleteSession:  (id)                   => apiRequest('DELETE', `/sessions/${id}`),
   completeSession:(id, revenue)          => apiRequest('POST',  `/sessions/${id}/complete`, { revenue }),
 
   leaderboard:    ()                     => apiRequest('GET',  '/leaderboard'),
