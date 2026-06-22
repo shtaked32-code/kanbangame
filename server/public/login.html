@@ -5,7 +5,25 @@
 <title>Kanban Game — Вход</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Segoe UI', sans-serif; background: #1a1a2e; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+body {
+  font-family: 'Segoe UI', sans-serif;
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden; position: relative;
+  background-color: #aa66cc;
+  background-image:
+    radial-gradient(ellipse 48% 48% at 50% 50%, rgba(240,215,252,0.9) 0%, rgba(185,120,215,0.45) 42%, transparent 68%),
+    radial-gradient(circle, rgba(100,25,135,0.22) 1.4px, transparent 1.4px),
+    repeating-conic-gradient(from 0deg at 50% 50%, #8530a8 0deg 4deg, #c07ee0 4deg 8deg);
+  background-size: auto, 15px 15px, auto;
+}
+body::before, body::after {
+  content: ''; position: fixed; border-radius: 50%;
+  background: rgba(255,255,255,0.09); pointer-events: none;
+  width: 520px; height: 520px; top: 50%; transform: translateY(-50%);
+}
+body::before { left: -210px; }
+body::after  { right: -210px; }
 .auth-box { background: #fff; border-radius: 8px; padding: 36px 40px; width: 360px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
 .logo { font-size: 22px; font-weight: 700; color: #333; margin-bottom: 24px; text-align: center; }
 .logo span { color: #e67e22; }
