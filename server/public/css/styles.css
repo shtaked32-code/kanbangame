@@ -16,6 +16,9 @@ body {
   height: 58px;
   gap: 8px;
   border-bottom: 3px solid #5aacce;
+  position: sticky;
+  top: 0;
+  z-index: 40;
 }
 .logo { font-size: 24px; font-weight: bold; color: #1a6a9f; white-space: nowrap; }
 .logo .sub { color: #888; font-weight: normal; }
